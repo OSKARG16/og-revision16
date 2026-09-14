@@ -103,6 +103,64 @@ function initDb() {
 
   seedDefaultData();
   seedTestResultsIfEmpty();
+  ensurePersistentAccounts();
+}
+
+function ensurePersistentAccounts() {
+  try {
+    // 1. Ensure user Oskar exists
+    let oskar = db.prepare("SELECT * FROM users WHERE LOWER(username) = 'oskar'").get();
+    if (!oskar) {
+      db.prepare(`
+        INSERT INTO users (username, password_hash, role, display_name, link_code)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(
+        'Oskar',
+        '$2b$10$8fNiLV4dNqBpqSzxvuCKCO2hlLk8OhRHtlQw8v458P2.Nh/Y7gvxa',
+        'student',
+        'Oskar G',
+        'REV-9JUD'
+      );
+      oskar = db.prepare("SELECT * FROM users WHERE LOWER(username) = 'oskar'").get();
+    }
+
+    // Ensure Oskar's 4 calendar events exist
+    if (oskar) {
+      const oskarEvents = db.prepare('SELECT COUNT(*) as count FROM events WHERE user_id = ?').get(oskar.id);
+      if (oskarEvents.count === 0) {
+        const insertEvent = db.prepare(`
+          INSERT INTO events (user_id, type, title, subject, date, description, completed)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+        insertEvent.run(oskar.id, 'REVISION', 'PHYSICS P4 AND P5', 'PHYSICS', '2026-09-14', '', 0);
+        insertEvent.run(oskar.id, 'TEST', 'CHEMISTRY TEST', 'CHEMISTRY', '2026-09-14', '', 0);
+        insertEvent.run(oskar.id, 'TEST', 'PHYSICS TEST', 'PHYSICS', '2026-09-16', '', 0);
+        insertEvent.run(oskar.id, 'TEST', 'BIOLOGY TEST', 'BIOLOGY', '2026-09-17', '', 0);
+      }
+    }
+
+    // 2. Ensure user bob exists
+    let bob = db.prepare("SELECT * FROM users WHERE LOWER(username) = 'bob'").get();
+    if (!bob) {
+      db.prepare(`
+        INSERT INTO users (username, password_hash, role, display_name)
+        VALUES (?, ?, ?, ?)
+      `).run(
+        'bob',
+        '$2b$10$gyOAbF1MkHf2UVxbvHkUCud.HQS6HnHD9cLHYUQg/rWzyY1rOLjk.',
+        'parent',
+        'bob'
+      );
+      bob = db.prepare("SELECT * FROM users WHERE LOWER(username) = 'bob'").get();
+    }
+
+    // Link bob to Oskar if not already linked
+    if (bob && oskar) {
+      db.prepare('INSERT OR IGNORE INTO parent_children (parent_id, child_id) VALUES (?, ?)').run(bob.id, oskar.id);
+    }
+  } catch (err) {
+    console.error('Error ensuring persistent accounts:', err);
+  }
 }
 
 function seedTestResultsIfEmpty() {

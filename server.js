@@ -235,7 +235,7 @@ app.post('/api/auth/login', rateLimitLogin, (req, res) => {
     }
 
     const cleanUsername = sanitize(username);
-    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(cleanUsername);
+    const user = db.prepare('SELECT * FROM users WHERE LOWER(username) = LOWER(?)').get(cleanUsername);
     if (!user) {
       recordAuthFailure(req);
       return res.status(401).json({ error: 'Invalid username or password.' });
@@ -260,13 +260,57 @@ app.post('/api/auth/login', rateLimitLogin, (req, res) => {
         id: user.id,
         username: user.username,
         role: user.role,
-        display_name: user.display_name || user.username,
-        link_code: user.link_code || null
+        display_name: user.display_name,
+        link_code: user.link_code
       }
     });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Login failed due to a server error.' });
+  }
+});
+
+// Reset password endpoint
+app.post('/api/auth/reset-password', (req, res) => {
+  try {
+    const { username, newPassword, linkCode } = req.body;
+    if (!username || !newPassword || typeof newPassword !== 'string' || newPassword.length < 4) {
+      return res.status(400).json({ error: 'Please provide username and a new password (min 4 characters).' });
+    }
+
+    const cleanUsername = sanitize(username);
+    const user = db.prepare('SELECT * FROM users WHERE LOWER(username) = LOWER(?)').get(cleanUsername);
+    if (!user) {
+      return res.status(404).json({ error: 'No account found with that username.' });
+    }
+
+    if (user.role === 'student' && user.link_code && linkCode) {
+      if (user.link_code.toUpperCase() !== sanitize(linkCode).toUpperCase()) {
+        return res.status(400).json({ error: 'Invalid student Parent Link Code.' });
+      }
+    }
+
+    const newHash = bcrypt.hashSync(newPassword, 10);
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, user.id);
+
+    const token = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, user.id, expiresAt);
+
+    res.json({
+      message: 'Password updated successfully!',
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        display_name: user.display_name,
+        link_code: user.link_code
+      }
+    });
+  } catch (err) {
+    console.error('Password reset error:', err);
+    res.status(500).json({ error: 'Failed to reset password.' });
   }
 });
 

@@ -1490,6 +1490,56 @@ function attachEventListeners() {
   tabRegister.addEventListener('click', () => openAuthModal(true));
   authForm.addEventListener('submit', handleAuthSubmit);
 
+  // Forgot / Reset password actions
+  const btnForgotPass = document.getElementById('btnForgotPass');
+  const forgotPassBox = document.getElementById('forgotPassBox');
+  const inputNewPassword = document.getElementById('inputNewPassword');
+  const inputResetLinkCode = document.getElementById('inputResetLinkCode');
+  const btnConfirmResetPass = document.getElementById('btnConfirmResetPass');
+
+  if (btnForgotPass && forgotPassBox) {
+    btnForgotPass.addEventListener('click', () => {
+      const isVisible = forgotPassBox.style.display !== 'none';
+      forgotPassBox.style.display = isVisible ? 'none' : 'block';
+      if (!isVisible && inputNewPassword) inputNewPassword.focus();
+    });
+  }
+
+  if (btnConfirmResetPass) {
+    btnConfirmResetPass.addEventListener('click', async () => {
+      const username = authUsername.value.trim();
+      const newPassword = inputNewPassword.value;
+      const linkCode = inputResetLinkCode ? inputResetLinkCode.value.trim() : '';
+
+      if (!username) {
+        showToast('Please enter your username above first.', 'error');
+        authUsername.focus();
+        return;
+      }
+      if (!newPassword || newPassword.length < 4) {
+        showToast('New password must be at least 4 characters.', 'error');
+        inputNewPassword.focus();
+        return;
+      }
+
+      try {
+        const res = await api('/api/auth/reset-password', {
+          method: 'POST',
+          body: JSON.stringify({ username, newPassword, linkCode })
+        });
+        showToast(res.message);
+        state.token = res.token;
+        state.user = res.user;
+        localStorage.setItem('og_revision_token', res.token);
+        authModal.style.display = 'none';
+        if (forgotPassBox) forgotPassBox.style.display = 'none';
+        await onUserAuthenticated();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+  }
+
   // Role toggle radio listeners
   document.querySelectorAll('input[name="accountRole"]').forEach(radio => {
     radio.addEventListener('change', (e) => setRegisterRole(e.target.value));

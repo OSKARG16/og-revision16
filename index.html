@@ -447,8 +447,20 @@
 
           <!-- Password -->
           <div class="form-group">
-            <label class="form-label" for="authPassword">Password</label>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+              <label class="form-label" for="authPassword" style="margin-bottom: 0;">Password</label>
+              <button type="button" class="btn-forgot-pass" id="btnForgotPass" style="background: none; border: none; font-size: 0.75rem; color: var(--purple-700); font-weight: 600; cursor: pointer; padding: 0;">Forgot / Reset?</button>
+            </div>
             <input type="password" id="authPassword" class="form-input" placeholder="Enter password (min. 4 characters)" required autocomplete="current-password">
+          </div>
+
+          <!-- Collapsible Password Reset Box -->
+          <div class="forgot-pass-box" id="forgotPassBox" style="display: none; background: #faf5ff; border: 1px solid #e9d5ff; padding: 0.85rem; border-radius: var(--radius-sm); margin-bottom: 1.15rem;">
+            <label class="form-label" style="color: #7e22ce;">Reset Your Password</label>
+            <p class="field-subtext" style="font-size: 0.75rem; margin-bottom: 0.5rem;">Enter your desired new password. If you are a student, enter your Link Code if you have one.</p>
+            <input type="password" id="inputNewPassword" class="form-input" placeholder="Enter new password (min. 4 characters)" style="margin-bottom: 0.5rem;">
+            <input type="text" id="inputResetLinkCode" class="form-input" placeholder="Parent Link Code (Optional, e.g. REV-9JUD)" style="margin-bottom: 0.65rem; text-transform: uppercase;">
+            <button type="button" class="btn-submit-purple" id="btnConfirmResetPass" style="padding: 0.5rem; font-size: 0.85rem;">Set New Password & Sign In</button>
           </div>
 
           <!-- Parent secure child linking (Shown during parent registration) -->
