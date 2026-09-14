@@ -307,6 +307,19 @@ function renderParentChildrenSwitcher() {
 
 // --- EVENT LOADING & RENDERING ---
 async function loadEvents() {
+  const targetId = state.user.role === 'parent' ? state.activeChildId : state.user.id;
+  const cacheKey = `og_events_cache_${targetId}`;
+
+  // Load cached events first for instant rendering upon sign in
+  const cached = localStorage.getItem(cacheKey);
+  if (cached && state.events.length === 0) {
+    try {
+      state.events = JSON.parse(cached);
+      updateOverviewStats();
+      renderCurrentCalendarView();
+    } catch {}
+  }
+
   try {
     let url = '/api/events';
     if (state.user.role === 'parent') {
@@ -316,10 +329,13 @@ async function loadEvents() {
 
     const events = await api(url);
     state.events = events;
+    localStorage.setItem(cacheKey, JSON.stringify(events));
     updateOverviewStats();
     renderCurrentCalendarView();
   } catch (err) {
-    showToast(err.message, 'error');
+    if (!cached) {
+      showToast(err.message, 'error');
+    }
   }
 }
 

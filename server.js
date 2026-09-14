@@ -61,19 +61,28 @@ function sanitize(str) {
   return str.replace(/[<>]/g, '').trim();
 }
 
-// In-Memory Rate Limiting for Authentication endpoints
-const authAttemptTracker = new Map();
-const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-const MAX_FAILED_ATTEMPTS = 10;
+app.set('trust proxy', true);
 
-function rateLimitAuth(req, res, next) {
-  const ip = req.ip || req.socket.remoteAddress || 'unknown-client';
+// In-Memory Rate Limiting for Login attempts (keyed per IP + username)
+const authAttemptTracker = new Map();
+const WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_FAILED_ATTEMPTS = 15;
+
+function getClientIdentifier(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  const ip = forwarded ? forwarded.split(',')[0].trim() : (req.ip || 'client');
+  const user = req.body && req.body.username ? req.body.username.trim().toLowerCase() : '';
+  return `${ip}:${user}`;
+}
+
+function rateLimitLogin(req, res, next) {
+  const key = getClientIdentifier(req);
   const now = Date.now();
-  let record = authAttemptTracker.get(ip);
+  let record = authAttemptTracker.get(key);
 
   if (!record || now > record.resetAt) {
     record = { count: 0, resetAt: now + WINDOW_MS };
-    authAttemptTracker.set(ip, record);
+    authAttemptTracker.set(key, record);
   }
 
   if (record.count >= MAX_FAILED_ATTEMPTS) {
@@ -83,20 +92,21 @@ function rateLimitAuth(req, res, next) {
     });
   }
 
-  req.authTracker = { ip, record };
+  req.authKey = key;
   next();
 }
 
 function recordAuthFailure(req) {
-  if (req.authTracker) {
-    req.authTracker.record.count += 1;
-    authAttemptTracker.set(req.authTracker.ip, req.authTracker.record);
+  if (req.authKey) {
+    const record = authAttemptTracker.get(req.authKey) || { count: 0, resetAt: Date.now() + WINDOW_MS };
+    record.count += 1;
+    authAttemptTracker.set(req.authKey, record);
   }
 }
 
 function clearAuthFailure(req) {
-  if (req.authTracker) {
-    authAttemptTracker.delete(req.authTracker.ip);
+  if (req.authKey) {
+    authAttemptTracker.delete(req.authKey);
   }
 }
 
@@ -142,7 +152,7 @@ function authenticate(req, res, next) {
 // --- AUTH ROUTES ---
 
 // Register new user (NO EMAIL REQUIRED, PROTECTED)
-app.post('/api/auth/register', rateLimitAuth, (req, res) => {
+app.post('/api/auth/register', (req, res) => {
   try {
     const { username, password, role, display_name, childLink } = req.body;
 
@@ -216,7 +226,7 @@ app.post('/api/auth/register', rateLimitAuth, (req, res) => {
 });
 
 // Login with rate limiting protection
-app.post('/api/auth/login', rateLimitAuth, (req, res) => {
+app.post('/api/auth/login', rateLimitLogin, (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) {
