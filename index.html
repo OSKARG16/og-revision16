@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OG REVISION - Student & Parent Study Calendar</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- TOP PURPLE THEME HEADER -->
+  <header class="og-header">
+    <div class="header-container">
+      <div class="brand-group" id="brandLogoBtn">
+        <div class="brand-logo">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+            <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
+          </svg>
+        </div>
+        <div class="brand-titles">
+          <h1 class="brand-name">OG REVISION</h1>
+          <span class="brand-tagline">Study • Test • Homework Calendar</span>
+        </div>
+      </div>
+
+      <!-- User controls in header -->
+      <div class="header-actions" id="headerActions">
+        <!-- Injected dynamically via JS: Auth buttons or User Profile & Child Selector -->
+      </div>
+    </div>
+
+    <!-- Parent context bar (shown when logged in as parent) -->
+    <div class="parent-context-bar" id="parentContextBar" style="display: none;">
+      <div class="parent-bar-content">
+        <div class="parent-info-pill">
+          <span class="parent-label">👨‍👩‍👧 Parent Portal</span>
+          <span class="parent-separator">•</span>
+          <span class="parent-child-info" id="parentActiveChildLabel">Select a child to view calendar</span>
+        </div>
+        <div class="parent-children-switcher" id="parentChildrenSwitcher">
+          <!-- Populated with children buttons -->
+        </div>
+        <button class="btn-link-child" id="btnOpenLinkChildModal">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          Manage Children
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN APPLICATION CONTENT -->
+  <main class="main-wrapper">
+    <!-- Read-Only notice for parents -->
+    <div class="notice-banner" id="readOnlyNotice" style="display: none;">
+      <div class="notice-icon">🔒</div>
+      <div class="notice-text">
+        <strong>Read-Only Mode:</strong> You are viewing <span id="noticeChildName">your child</span>'s calendar. Parents can track revision, upcoming tests, and homework deadlines. Only students can add or edit calendar items.
+      </div>
+    </div>
+
+    <!-- Student Private Parent Link Code Widget -->
+    <div class="student-code-banner" id="studentCodeBanner" style="display: none;">
+      <div class="code-banner-left">
+        <div class="code-icon">🔐</div>
+        <div>
+          <span class="code-title">Private Parent Link Code</span>
+          <p class="code-subtitle">Give this code and your username to your parents so they can securely link to your study schedule in read-only mode.</p>
+        </div>
+      </div>
+      <div class="code-banner-right">
+        <div class="code-badge-container">
+          <span class="code-pill" id="studentLinkCodeDisplay">REV-????</span>
+          <button class="btn-copy-code" id="btnCopyLinkCode" title="Copy code">Copy</button>
+          <button class="btn-regen-code" id="btnRegenLinkCode" title="Regenerate code">↻ Reset</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty state for parents with no children -->
+    <div class="no-children-banner" id="noChildrenBanner" style="display: none;">
+      <div class="empty-icon">👨‍👩‍👧</div>
+      <h2>No Children Linked Yet</h2>
+      <p>Enter your child's student username and their private Parent Link Code to securely monitor their revision sessions, upcoming tests, and homework.</p>
+      <button class="btn-primary-purple" id="btnLinkFirstChild">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        Link a Child Now
+      </button>
+    </div>
+
+    <!-- App Dashboard & Calendar Container -->
+    <div id="calendarApp" class="calendar-app" style="display: none;">
+      
+      <!-- Metrics / Stats Bar -->
+      <section class="stats-overview">
+        <div class="stat-card revision-card" data-filter="REVISION">
+          <div class="stat-icon">📚</div>
+          <div class="stat-details">
+            <span class="stat-value" id="statRevisionCount">0</span>
+            <span class="stat-label">REVISION Sessions</span>
+          </div>
+        </div>
+        <div class="stat-card test-card" data-filter="TEST">
+          <div class="stat-icon">📝</div>
+          <div class="stat-details">
+            <span class="stat-value" id="statTestCount">0</span>
+            <span class="stat-label">Upcoming TESTS</span>
+          </div>
+        </div>
+        <div class="stat-card homework-card" data-filter="HOMEWORK">
+          <div class="stat-icon">💼</div>
+          <div class="stat-details">
+            <span class="stat-value" id="statHomeworkCount">0</span>
+            <span class="stat-label">Pending HOMEWORK</span>
+          </div>
+        </div>
+        <div class="stat-card total-card" data-filter="ALL">
+          <div class="stat-icon">🎯</div>
+          <div class="stat-details">
+            <span class="stat-value" id="statTotalCount">0</span>
+            <span class="stat-label">Total Activities</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Calendar Toolbar -->
+      <div class="calendar-toolbar">
+        <div class="toolbar-left">
+          <div class="month-navigation">
+            <button class="btn-nav" id="btnPrevMonth" title="Previous Month">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </button>
+            <h2 class="current-period-title" id="currentPeriodTitle">September 2026</h2>
+            <button class="btn-nav" id="btnNextMonth" title="Next Month">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+            <button class="btn-today" id="btnToday">Today</button>
+          </div>
+        </div>
+
+        <!-- Filter and View Controls -->
+        <div class="toolbar-center">
+          <div class="view-toggle">
+            <button class="btn-toggle active" data-view="month" id="btnViewMonth">Month</button>
+            <button class="btn-toggle" data-view="week" id="btnViewWeek">Week</button>
+            <button class="btn-toggle" data-view="agenda" id="btnViewAgenda">Agenda</button>
+          </div>
+          
+          <div class="type-filters">
+            <button class="filter-chip active" data-type="ALL">All</button>
+            <button class="filter-chip revision" data-type="REVISION">📚 Revision</button>
+            <button class="filter-chip test" data-type="TEST">📝 Test</button>
+            <button class="filter-chip homework" data-type="HOMEWORK">💼 Homework</button>
+          </div>
+        </div>
+
+        <div class="toolbar-right">
+          <!-- Student add item button -->
+          <button class="btn-add-event" id="btnAddEventBtn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            <span>Add to Calendar</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Month Calendar View -->
+      <div class="calendar-view-container" id="monthViewContainer">
+        <div class="weekdays-grid">
+          <div>Mon</div>
+          <div>Tue</div>
+          <div>Wed</div>
+          <div>Thu</div>
+          <div>Fri</div>
+          <div>Sat</div>
+          <div>Sun</div>
+        </div>
+        <div class="days-grid" id="daysGrid">
+          <!-- Injected via JavaScript -->
+        </div>
+      </div>
+
+      <!-- Week Calendar View -->
+      <div class="calendar-view-container" id="weekViewContainer" style="display: none;">
+        <div class="week-header-grid" id="weekHeaderGrid">
+          <!-- Injected via JS -->
+        </div>
+        <div class="week-body-grid" id="weekBodyGrid">
+          <!-- Injected via JS -->
+        </div>
+      </div>
+
+      <!-- Agenda View -->
+      <div class="calendar-view-container" id="agendaViewContainer" style="display: none;">
+        <div class="agenda-list" id="agendaList">
+          <!-- Injected via JS -->
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Welcome landing state (When not logged in) -->
+    <div class="guest-hero" id="guestHero">
+      <div class="hero-badge">Welcome to OG REVISION</div>
+      <h2>Organise Revision, Ace Tests & Track Homework</h2>
+      <p class="hero-description">
+        A streamlined, privacy-protected study planner designed for students to take control of their learning, with confidential read-only access for parents.
+      </p>
+      
+      <div class="hero-action-buttons">
+        <button class="btn-hero-primary" id="btnHeroCreateAccount">Create Free Account</button>
+        <button class="btn-hero-secondary" id="btnHeroSignIn">Sign In</button>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-item">
+          <div class="feature-icon revision-color">📚</div>
+          <h3>Plan REVISION</h3>
+          <p>Schedule focused revision sessions by subject, topic, and revision techniques with visual reminders.</p>
+        </div>
+        <div class="feature-item">
+          <div class="feature-icon test-color">📝</div>
+          <h3>Track TESTS</h3>
+          <p>Never get surprised by an upcoming exam. Countdown days and see what topics are being assessed.</p>
+        </div>
+        <div class="feature-item">
+          <div class="feature-icon homework-color">💼</div>
+          <h3>Manage HOMEWORK</h3>
+          <p>Keep on top of assignments, due dates, and completion status without stressful last-minute rushes.</p>
+        </div>
+        <div class="feature-item">
+          <div class="feature-icon parent-color">🔒</div>
+          <h3>Protected Privacy</h3>
+          <p>Strict user and data isolation. No public directories. Parents link securely using private student codes.</p>
+        </div>
+      </div>
+
+      <!-- Quick Demo Access Card -->
+      <div class="demo-logins-card">
+        <div class="demo-header">
+          <span class="demo-tag">Instant Preview</span>
+          <h3>Try Demo Accounts</h3>
+        </div>
+        <p>Explore both accounts with pre-loaded demo data:</p>
+        <div class="demo-buttons">
+          <button class="btn-demo-student" id="btnDemoStudent">
+            🎓 Sign In as Alex (Student)
+            <small>Can add & edit Revision, Tests & Homework (Code: REV-1001)</small>
+          </button>
+          <button class="btn-demo-parent" id="btnDemoParent">
+            👨‍👩‍👧 Sign In as Sarah (Parent)
+            <small>Securely views Alex & Emma's calendars (Read-Only)</small>
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- AUTHENTICATION MODAL (Sign In / Register) -->
+  <div class="modal-overlay" id="authModal" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-tabs">
+          <button class="tab-btn active" id="tabSignIn">Sign In</button>
+          <button class="tab-btn" id="tabRegister">Create Account</button>
+        </div>
+        <button class="modal-close" id="btnCloseAuthModal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="alert-box error" id="authError" style="display: none;"></div>
+        
+        <form id="authForm">
+          <!-- Role selector (Shown only on Register tab) -->
+          <div class="form-group" id="roleSelectionGroup" style="display: none;">
+            <label class="form-label">I am a:</label>
+            <div class="role-selector-grid">
+              <label class="role-card selected" id="roleLabelStudent">
+                <input type="radio" name="accountRole" value="student" checked>
+                <div class="role-card-content">
+                  <span class="role-icon">🎓</span>
+                  <span class="role-name">Student</span>
+                  <span class="role-desc">Manage my revision, tests & homework</span>
+                </div>
+              </label>
+              <label class="role-card" id="roleLabelParent">
+                <input type="radio" name="accountRole" value="parent">
+                <div class="role-card-content">
+                  <span class="role-icon">👨‍👩‍👧</span>
+                  <span class="role-name">Parent</span>
+                  <span class="role-desc">Securely view my children's calendars</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Display name (Register tab only) -->
+          <div class="form-group" id="displayNameGroup" style="display: none;">
+            <label class="form-label" for="regDisplayName">Full / Display Name</label>
+            <input type="text" id="regDisplayName" class="form-input" placeholder="e.g. Alex Turner or Sarah Turner">
+          </div>
+
+          <!-- Username (NO EMAIL) -->
+          <div class="form-group">
+            <label class="form-label" for="authUsername">Username</label>
+            <input type="text" id="authUsername" class="form-input" placeholder="Choose a username (no email required)" required autocomplete="username">
+            <span class="input-hint">Letters, numbers, dashes and underscores only</span>
+          </div>
+
+          <!-- Password -->
+          <div class="form-group">
+            <label class="form-label" for="authPassword">Password</label>
+            <input type="password" id="authPassword" class="form-input" placeholder="Enter password (min. 4 characters)" required autocomplete="current-password">
+          </div>
+
+          <!-- Parent secure child linking (Shown during parent registration) -->
+          <div class="form-group secure-box-group" id="parentRegisterChildrenGroup" style="display: none;">
+            <label class="form-label">Link a child now (Optional):</label>
+            <p class="field-subtext">Enter your child's username and their private Parent Link Code. You can also link children anytime inside your account.</p>
+            <div class="form-row">
+              <div class="col-4">
+                <input type="text" id="regChildUsername" class="form-input" placeholder="Child's username">
+              </div>
+              <div class="col-4">
+                <input type="text" id="regChildCode" class="form-input" placeholder="Link code (e.g. REV-1001)" style="text-transform: uppercase;">
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" class="btn-submit-purple" id="btnAuthSubmit">Sign In</button>
+        </form>
+
+        <div class="modal-footer-note" id="authFooterNote">
+          🔒 No email required. All accounts and calendars are protected.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD / EDIT EVENT MODAL (Student Only) -->
+  <div class="modal-overlay" id="eventModal" style="display: none;">
+    <div class="modal-card modal-card-wide">
+      <div class="modal-header">
+        <h3 id="eventModalTitle">Add to Calendar</h3>
+        <button class="modal-close" id="btnCloseEventModal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <form id="eventForm">
+          <input type="hidden" id="eventId">
+
+          <!-- Activity Type Radio Selector -->
+          <div class="form-group">
+            <label class="form-label">Activity Type:</label>
+            <div class="type-selector-grid">
+              <label class="type-option revision-option selected" id="optRevision">
+                <input type="radio" name="eventType" value="REVISION" checked>
+                <div class="type-content">
+                  <span class="type-icon">📚</span>
+                  <strong>REVISION</strong>
+                  <small>Study session / topics</small>
+                </div>
+              </label>
+
+              <label class="type-option test-option" id="optTest">
+                <input type="radio" name="eventType" value="TEST">
+                <div class="type-content">
+                  <span class="type-icon">📝</span>
+                  <strong>TEST</strong>
+                  <small>Exam / quiz / mock</small>
+                </div>
+              </label>
+
+              <label class="type-option homework-option" id="optHomework">
+                <input type="radio" name="eventType" value="HOMEWORK">
+                <div class="type-content">
+                  <span class="type-icon">💼</span>
+                  <strong>HOMEWORK</strong>
+                  <small>Assignment / project</small>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Title -->
+          <div class="form-group">
+            <label class="form-label" for="eventTitle">Title / Task Name</label>
+            <input type="text" id="eventTitle" class="form-input" placeholder="e.g. Maths Trigonometry past papers" required>
+          </div>
+
+          <!-- Subject -->
+          <div class="form-group">
+            <label class="form-label" for="eventSubject">Subject</label>
+            <input type="text" id="eventSubject" class="form-input" placeholder="e.g. Mathematics, Physics, English..." required>
+            <div class="quick-subject-chips">
+              <span class="chip-label">Suggestions:</span>
+              <button type="button" class="subject-chip">Maths</button>
+              <button type="button" class="subject-chip">English</button>
+              <button type="button" class="subject-chip">Physics</button>
+              <button type="button" class="subject-chip">Chemistry</button>
+              <button type="button" class="subject-chip">Biology</button>
+              <button type="button" class="subject-chip">History</button>
+              <button type="button" class="subject-chip">Computer Science</button>
+              <button type="button" class="subject-chip">Geography</button>
+              <button type="button" class="subject-chip">French</button>
+            </div>
+          </div>
+
+          <!-- Date and Times Row -->
+          <div class="form-row">
+            <div class="form-group col-4">
+              <label class="form-label" for="eventDate">Date</label>
+              <input type="date" id="eventDate" class="form-input" required>
+            </div>
+            <div class="form-group col-4">
+              <label class="form-label" for="eventStartTime">Start Time</label>
+              <input type="time" id="eventStartTime" class="form-input">
+            </div>
+            <div class="form-group col-4">
+              <label class="form-label" for="eventEndTime">End Time</label>
+              <input type="time" id="eventEndTime" class="form-input">
+            </div>
+          </div>
+
+          <!-- Description / Notes -->
+          <div class="form-group">
+            <label class="form-label" for="eventDescription">Description / Revision Notes</label>
+            <textarea id="eventDescription" class="form-textarea" rows="3" placeholder="Specific topics to cover, flashcards, questions to complete, exam venue..."></textarea>
+          </div>
+
+          <!-- Completed Checkbox (for Homework / Revision) -->
+          <div class="form-group checkbox-group" id="eventCompletedGroup">
+            <label class="checkbox-label">
+              <input type="checkbox" id="eventCompleted">
+              <span>Mark as completed</span>
+            </label>
+          </div>
+
+          <!-- Form Buttons -->
+          <div class="modal-form-actions">
+            <button type="button" class="btn-danger" id="btnDeleteEvent" style="display: none;">Delete Item</button>
+            <div class="actions-right">
+              <button type="button" class="btn-secondary" id="btnCancelEvent">Cancel</button>
+              <button type="submit" class="btn-submit-purple" id="btnSaveEvent">Save to Calendar</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- READ-ONLY EVENT DETAIL MODAL (For Parents & Quick Inspection) -->
+  <div class="modal-overlay" id="eventViewModal" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="event-type-badge-large" id="viewTypeBadge">REVISION</div>
+        <button class="modal-close" id="btnCloseViewModal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <h2 class="view-event-title" id="viewEventTitle">Event Title</h2>
+        
+        <div class="view-meta-list">
+          <div class="view-meta-row">
+            <span class="view-meta-label">Subject:</span>
+            <span class="view-meta-value" id="viewEventSubject">-</span>
+          </div>
+          <div class="view-meta-row">
+            <span class="view-meta-label">Date:</span>
+            <span class="view-meta-value" id="viewEventDate">-</span>
+          </div>
+          <div class="view-meta-row">
+            <span class="view-meta-label">Time:</span>
+            <span class="view-meta-value" id="viewEventTime">All Day</span>
+          </div>
+          <div class="view-meta-row">
+            <span class="view-meta-label">Status:</span>
+            <span class="view-meta-value" id="viewEventStatus">Pending</span>
+          </div>
+        </div>
+
+        <div class="view-description-box" id="viewDescriptionBox">
+          <h4>Notes & Instructions</h4>
+          <p id="viewEventDescription">No additional notes provided.</p>
+        </div>
+
+        <div class="parent-readonly-footer-badge" id="viewParentReadOnlyNote" style="display: none;">
+          🔒 Read-only view. Only the student can modify this task.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LINK / MANAGE CHILDREN MODAL (Parent In-Account with Secure Code) -->
+  <div class="modal-overlay" id="linkChildModal" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Manage Linked Children</h3>
+        <button class="modal-close" id="btnCloseLinkChildModal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Currently linked children list -->
+        <h4 class="section-subtitle">Your Linked Children</h4>
+        <div class="linked-children-list" id="currentLinkedChildrenList">
+          <!-- Injected via JS -->
+        </div>
+
+        <!-- Securely link student using Username + Code -->
+        <h4 class="section-subtitle mt-4">Link a Student Account</h4>
+        <p class="field-subtext">Ask your child for their <strong>Username</strong> and private <strong>Parent Link Code</strong>:</p>
+        
+        <form id="formLinkStudentSecure" class="secure-link-form">
+          <div class="alert-box error" id="linkStudentError" style="display: none;"></div>
+          <div class="form-group">
+            <label class="form-label" for="inputLinkUsername">Student's Username</label>
+            <input type="text" id="inputLinkUsername" class="form-input" placeholder="e.g. alex_student" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="inputLinkCode">Private Parent Link Code</label>
+            <input type="text" id="inputLinkCode" class="form-input" placeholder="e.g. REV-1001" style="text-transform: uppercase;" required>
+          </div>
+          <button type="submit" class="btn-submit-purple" id="btnSubmitLinkChild">Verify & Link Student</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- JavaScript Application -->
+  <script src="app.js"></script>
+</body>
+</html>
