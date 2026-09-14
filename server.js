@@ -23,8 +23,27 @@ app.use((req, res, next) => {
   next();
 });
 
+const fs = require('fs');
+
 app.use(express.json({ limit: '100kb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+
+// Auto-detect frontend directory (supports both ./public and root ./)
+const publicDir = fs.existsSync(path.join(__dirname, 'public', 'index.html'))
+  ? path.join(__dirname, 'public')
+  : __dirname;
+
+app.use(express.static(publicDir));
+
+// Route alias for style.css / styles.css
+app.get(['/styles.css', '/style.css'], (req, res, next) => {
+  if (fs.existsSync(path.join(publicDir, 'styles.css'))) {
+    return res.sendFile(path.join(publicDir, 'styles.css'));
+  }
+  if (fs.existsSync(path.join(publicDir, 'style.css'))) {
+    return res.sendFile(path.join(publicDir, 'style.css'));
+  }
+  next();
+});
 
 // Clean up expired sessions periodically
 function cleanExpiredSessions() {
@@ -589,7 +608,11 @@ app.use('/api', (req, res) => {
 
 // Fallback for client-side routing
 app.use((req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'), (err) => {
+  const indexPath = fs.existsSync(path.join(__dirname, 'public', 'index.html'))
+    ? path.join(__dirname, 'public', 'index.html')
+    : path.join(__dirname, 'index.html');
+
+  res.sendFile(indexPath, (err) => {
     if (err && !res.headersSent) {
       res.status(err.status || 500).end();
     }
