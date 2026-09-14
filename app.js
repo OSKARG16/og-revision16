@@ -11,7 +11,10 @@ const state = {
   currentDate: new Date(), // Active calendar focus date
   currentView: 'month',    // 'month' | 'week' | 'agenda'
   filterType: 'ALL',       // 'ALL' | 'REVISION' | 'TEST' | 'HOMEWORK'
-  events: []               // Calendar events for active student
+  events: [],              // Calendar events for active student
+  currentTab: 'calendar',  // 'calendar' | 'test_results'
+  testResults: [],         // All test results for active student
+  testStats: null          // Computed analytics and growth statistics
 };
 
 // --- DOM ELEMENTS ---
@@ -21,6 +24,45 @@ const parentContextBar = document.getElementById('parentContextBar');
 const parentActiveChildLabel = document.getElementById('parentActiveChildLabel');
 const parentChildrenSwitcher = document.getElementById('parentChildrenSwitcher');
 const btnOpenLinkChildModal = document.getElementById('btnOpenLinkChildModal');
+
+// Nav Tabs
+const appNavTabs = document.getElementById('appNavTabs');
+const tabNavCalendar = document.getElementById('tabNavCalendar');
+const tabNavTestResults = document.getElementById('tabNavTestResults');
+
+// Test Results View Elements
+const testResultsApp = document.getElementById('testResultsApp');
+const parentResultsNotice = document.getElementById('parentResultsNotice');
+const resultsNoticeChildName = document.getElementById('resultsNoticeChildName');
+const statDominantTier = document.getElementById('statDominantTier');
+const statTotalTestsCount = document.getElementById('statTotalTestsCount');
+const statTopSubject = document.getElementById('statTopSubject');
+const statGrowthTrend = document.getElementById('statGrowthTrend');
+const barMastering = document.getElementById('barMastering');
+const barSecure = document.getElementById('barSecure');
+const barDeveloping = document.getElementById('barDeveloping');
+const barEmerging = document.getElementById('barEmerging');
+const legendMasteringPct = document.getElementById('legendMasteringPct');
+const legendSecurePct = document.getElementById('legendSecurePct');
+const legendDevelopingPct = document.getElementById('legendDevelopingPct');
+const legendEmergingPct = document.getElementById('legendEmergingPct');
+const subjectsPerformanceGrid = document.getElementById('subjectsPerformanceGrid');
+const filterResultsYear = document.getElementById('filterResultsYear');
+const filterResultsSubject = document.getElementById('filterResultsSubject');
+const btnAddTestResultBtn = document.getElementById('btnAddTestResultBtn');
+const resultsCardsList = document.getElementById('resultsCardsList');
+
+// Test Result Modal Elements
+const testResultModal = document.getElementById('testResultModal');
+const testResultForm = document.getElementById('testResultForm');
+const btnCloseTestResultModal = document.getElementById('btnCloseTestResultModal');
+const btnCancelTestResult = document.getElementById('btnCancelTestResult');
+const inputResultSubject = document.getElementById('inputResultSubject');
+const selectResultDate = document.getElementById('selectResultDate');
+const inputResultTestName = document.getElementById('inputResultTestName');
+const inputResultMarks = document.getElementById('inputResultMarks');
+const ks3ResultGroup = document.getElementById('ks3ResultGroup');
+const gcseResultGroup = document.getElementById('gcseResultGroup');
 
 const readOnlyNotice = document.getElementById('readOnlyNotice');
 const noticeChildName = document.getElementById('noticeChildName');
@@ -155,6 +197,7 @@ function escapeHtml(str) {
 
 // --- INITIALIZATION ---
 async function initApp() {
+  populateTestDateOptions();
   attachEventListeners();
 
   if (state.token) {
@@ -177,11 +220,13 @@ async function initApp() {
 async function onUserAuthenticated() {
   renderHeaderUser();
   guestHero.style.display = 'none';
+  if (appNavTabs) appNavTabs.style.display = 'flex';
 
   if (state.user.role === 'parent') {
     studentCodeBanner.style.display = 'none';
     parentContextBar.style.display = 'block';
-    btnAddEventBtn.style.display = 'none'; // Parents cannot add items
+    btnAddEventBtn.style.display = 'none'; // Parents cannot add calendar items
+    if (btnAddTestResultBtn) btnAddTestResultBtn.style.display = 'none'; // Parents cannot add test results
     await loadParentChildren();
   } else {
     // Student
@@ -189,6 +234,8 @@ async function onUserAuthenticated() {
     readOnlyNotice.style.display = 'none';
     noChildrenBanner.style.display = 'none';
     btnAddEventBtn.style.display = 'inline-flex';
+    if (btnAddTestResultBtn) btnAddTestResultBtn.style.display = 'inline-flex';
+    if (parentResultsNotice) parentResultsNotice.style.display = 'none';
     calendarApp.style.display = 'block';
 
     // Show student private link code banner
@@ -197,6 +244,8 @@ async function onUserAuthenticated() {
 
     await loadEvents();
   }
+
+  switchTab('calendar');
 }
 
 function renderHeaderUser() {
@@ -227,12 +276,17 @@ function renderHeaderUser() {
 function renderGuestView() {
   state.user = null;
   state.events = [];
+  state.testResults = [];
+  state.testStats = null;
   renderHeaderUser();
   studentCodeBanner.style.display = 'none';
   parentContextBar.style.display = 'none';
   readOnlyNotice.style.display = 'none';
   noChildrenBanner.style.display = 'none';
   calendarApp.style.display = 'none';
+  if (appNavTabs) appNavTabs.style.display = 'none';
+  if (testResultsApp) testResultsApp.style.display = 'none';
+  if (parentResultsNotice) parentResultsNotice.style.display = 'none';
   guestHero.style.display = 'block';
 }
 
@@ -258,6 +312,7 @@ async function loadParentChildren() {
     if (children.length === 0) {
       calendarApp.style.display = 'none';
       readOnlyNotice.style.display = 'none';
+      if (testResultsApp) testResultsApp.style.display = 'none';
       noChildrenBanner.style.display = 'block';
       parentActiveChildLabel.textContent = 'No children linked';
       parentChildrenSwitcher.innerHTML = '';
@@ -265,7 +320,11 @@ async function loadParentChildren() {
     }
 
     noChildrenBanner.style.display = 'none';
-    calendarApp.style.display = 'block';
+    if (state.currentTab === 'calendar') {
+      calendarApp.style.display = 'block';
+    } else {
+      testResultsApp.style.display = 'flex';
+    }
 
     // If active child is not set or not in current list, pick first
     if (!state.activeChildId || !children.some(c => c.id === state.activeChildId)) {
@@ -273,7 +332,12 @@ async function loadParentChildren() {
     }
 
     renderParentChildrenSwitcher();
-    await loadEvents();
+    if (state.currentTab === 'calendar') {
+      await loadEvents();
+    } else {
+      await loadTestResults();
+      await loadTestStats();
+    }
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -299,7 +363,16 @@ function renderParentChildrenSwitcher() {
       if (childId !== state.activeChildId) {
         state.activeChildId = childId;
         renderParentChildrenSwitcher();
-        await loadEvents();
+        if (state.currentTab === 'calendar') {
+          await loadEvents();
+        } else if (state.currentTab === 'test_results') {
+          const selectedChild = state.linkedChildren.find(c => c.id === state.activeChildId);
+          if (selectedChild && resultsNoticeChildName) {
+            resultsNoticeChildName.textContent = selectedChild.display_name || selectedChild.username;
+          }
+          await loadTestResults();
+          await loadTestStats();
+        }
       }
     });
   });
@@ -984,15 +1057,405 @@ function formatShortDate(d) {
   return `${d.getDate()} ${months[d.getMonth()]}`;
 }
 
+// ===================================================================
+// TEST RESULTS & ACADEMIC GROWTH LOGIC
+// ===================================================================
+
+function switchTab(tabName) {
+  state.currentTab = tabName;
+  
+  if (tabNavCalendar) tabNavCalendar.classList.toggle('active', tabName === 'calendar');
+  if (tabNavTestResults) tabNavTestResults.classList.toggle('active', tabName === 'test_results');
+
+  if (tabName === 'calendar') {
+    if (testResultsApp) testResultsApp.style.display = 'none';
+    if (state.user && state.user.role === 'parent' && state.linkedChildren.length === 0) {
+      if (calendarApp) calendarApp.style.display = 'none';
+      if (noChildrenBanner) noChildrenBanner.style.display = 'block';
+    } else {
+      if (calendarApp) calendarApp.style.display = 'block';
+    }
+  } else if (tabName === 'test_results') {
+    if (calendarApp) calendarApp.style.display = 'none';
+    if (noChildrenBanner) noChildrenBanner.style.display = 'none';
+    if (testResultsApp) testResultsApp.style.display = 'flex';
+
+    if (state.user && state.user.role === 'parent') {
+      if (btnAddTestResultBtn) btnAddTestResultBtn.style.display = 'none';
+      const activeChild = state.linkedChildren.find(c => c.id === state.activeChildId) || state.linkedChildren[0];
+      if (activeChild) {
+        if (parentResultsNotice) parentResultsNotice.style.display = 'flex';
+        if (resultsNoticeChildName) resultsNoticeChildName.textContent = activeChild.display_name || activeChild.username;
+      } else {
+        if (parentResultsNotice) parentResultsNotice.style.display = 'none';
+      }
+    } else {
+      if (btnAddTestResultBtn) btnAddTestResultBtn.style.display = 'inline-flex';
+      if (parentResultsNotice) parentResultsNotice.style.display = 'none';
+    }
+
+    loadTestResults();
+    loadTestStats();
+  }
+}
+
+function populateTestDateOptions() {
+  if (!selectResultDate) return;
+  selectResultDate.innerHTML = '';
+  
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  
+  // Starting September 2026 (month index 8) for 36 months (3 years)
+  const startYear = 2026;
+  const startMonth = 8; // September
+  
+  for (let i = 0; i < 36; i++) {
+    const mIdx = (startMonth + i) % 12;
+    const year = startYear + Math.floor((startMonth + i) / 12);
+    const label = `${months[mIdx]} ${year}`;
+    const opt = document.createElement('option');
+    opt.value = label;
+    opt.textContent = label;
+    selectResultDate.appendChild(opt);
+  }
+}
+
+function setModalYearGroup(yearGroup) {
+  document.querySelectorAll('input[name="resultYearGroup"]').forEach(radio => {
+    const isTarget = radio.value === yearGroup;
+    radio.checked = isTarget;
+    const parentLabel = radio.closest('.year-option');
+    if (parentLabel) parentLabel.classList.toggle('selected', isTarget);
+  });
+
+  if (yearGroup === 'GCSE') {
+    if (ks3ResultGroup) ks3ResultGroup.style.display = 'none';
+    if (gcseResultGroup) gcseResultGroup.style.display = 'block';
+  } else {
+    if (ks3ResultGroup) ks3ResultGroup.style.display = 'block';
+    if (gcseResultGroup) gcseResultGroup.style.display = 'none';
+  }
+}
+
+function setModalKs3Level(level) {
+  document.querySelectorAll('input[name="ks3Level"]').forEach(radio => {
+    const isTarget = radio.value === level;
+    radio.checked = isTarget;
+    const parentCard = radio.closest('.result-level-card');
+    if (parentCard) parentCard.classList.toggle('selected', isTarget);
+  });
+}
+
+function setModalGcseGrade(grade) {
+  document.querySelectorAll('input[name="gcseGrade"]').forEach(radio => {
+    const isTarget = String(radio.value) === String(grade);
+    radio.checked = isTarget;
+    const parentBtn = radio.closest('.gcse-grade-btn');
+    if (parentBtn) parentBtn.classList.toggle('selected', isTarget);
+  });
+}
+
+function openAddTestResultModal() {
+  if (state.user.role !== 'student') return;
+  
+  testResultForm.reset();
+  setModalYearGroup('Y7');
+  setModalKs3Level('SECURE');
+  setModalGcseGrade('7');
+  
+  if (selectResultDate && selectResultDate.options.length > 0) {
+    selectResultDate.selectedIndex = 0;
+  }
+  
+  testResultModal.style.display = 'flex';
+  if (inputResultSubject) inputResultSubject.focus();
+}
+
+async function loadTestResults() {
+  const targetId = state.user.role === 'parent' ? state.activeChildId : state.user.id;
+  if (!targetId) return;
+
+  const cacheKey = `og_test_results_${targetId}`;
+  
+  const cached = localStorage.getItem(cacheKey);
+  if (cached && state.testResults.length === 0) {
+    try {
+      state.testResults = JSON.parse(cached);
+      updateSubjectFilterOptions();
+      renderTestResultsList();
+    } catch {}
+  }
+
+  try {
+    let url = '/api/test-results';
+    if (state.user.role === 'parent') {
+      url += `?studentId=${state.activeChildId}`;
+    }
+
+    const data = await api(url);
+    state.testResults = data;
+    localStorage.setItem(cacheKey, JSON.stringify(data));
+    updateSubjectFilterOptions();
+    renderTestResultsList();
+  } catch (err) {
+    if (!cached) {
+      showToast(err.message, 'error');
+    }
+  }
+}
+
+function updateSubjectFilterOptions() {
+  if (!filterResultsSubject) return;
+  const currentVal = filterResultsSubject.value;
+  const subjects = Array.from(new Set(state.testResults.map(r => r.subject))).sort();
+  
+  filterResultsSubject.innerHTML = '<option value="ALL">All Subjects</option>' +
+    subjects.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+  
+  if (subjects.includes(currentVal)) {
+    filterResultsSubject.value = currentVal;
+  } else {
+    filterResultsSubject.value = 'ALL';
+  }
+}
+
+function renderTestResultsList() {
+  if (!resultsCardsList) return;
+
+  const yearFilter = filterResultsYear ? filterResultsYear.value : 'ALL';
+  const subjFilter = filterResultsSubject ? filterResultsSubject.value : 'ALL';
+
+  const filtered = state.testResults.filter(item => {
+    if (yearFilter !== 'ALL' && item.year_group !== yearFilter) return false;
+    if (subjFilter !== 'ALL' && item.subject.toLowerCase() !== subjFilter.toLowerCase()) return false;
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    resultsCardsList.innerHTML = `
+      <div class="empty-results-box">
+        <div class="empty-results-icon">📝</div>
+        <p><strong>No test results found.</strong></p>
+        <p class="empty-hint">${state.user.role === 'student' ? 'Click "Add Test Result" above to record your first score!' : 'No test results have been recorded for this student yet.'}</p>
+      </div>
+    `;
+    return;
+  }
+
+  resultsCardsList.innerHTML = filtered.map(item => {
+    const tierClass = `tier-${(item.growth_tier || 'emerging').toLowerCase()}`;
+    const isStudent = state.user.role === 'student';
+
+    let displayResult = escapeHtml(item.raw_result);
+    let tierSub = escapeHtml(item.growth_tier);
+    if (item.year_group === 'GCSE') {
+      displayResult = `Grade ${escapeHtml(item.raw_result)}`;
+      tierSub = `${escapeHtml(item.growth_tier)}`;
+    }
+
+    return `
+      <div class="result-card" data-id="${item.id}">
+        <div class="result-card-main">
+          <span class="result-year-badge">${escapeHtml(item.year_group)}</span>
+          <div class="result-details">
+            <div class="result-subject-title">
+              <span>${escapeHtml(item.subject)}</span>
+            </div>
+            ${item.test_name ? `<span class="result-test-name">${escapeHtml(item.test_name)}</span>` : ''}
+            <div class="result-meta-row">
+              <span>🗓️ ${escapeHtml(item.test_date)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="result-card-right">
+          ${item.marks ? `<span class="result-marks-badge">Score: ${escapeHtml(item.marks)}</span>` : ''}
+          <div class="result-grade-badge ${tierClass}">
+            <span class="result-raw-val">${displayResult}</span>
+            <span class="result-tier-sub">${tierSub}</span>
+          </div>
+          ${isStudent ? `
+            <button class="btn-delete-result" data-id="${item.id}" title="Delete Test Result">
+              &times;
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  if (state.user.role === 'student') {
+    resultsCardsList.querySelectorAll('.btn-delete-result').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const id = e.currentTarget.getAttribute('data-id');
+        handleDeleteTestResult(id);
+      });
+    });
+  }
+}
+
+async function handleDeleteTestResult(id) {
+  if (!confirm('Are you sure you want to delete this test result?')) return;
+
+  try {
+    await api(`/api/test-results/${id}`, { method: 'DELETE' });
+    showToast('Test result deleted successfully.');
+    await loadTestResults();
+    await loadTestStats();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function loadTestStats() {
+  const targetId = state.user.role === 'parent' ? state.activeChildId : state.user.id;
+  if (!targetId) return;
+
+  try {
+    let url = '/api/test-results/stats';
+    if (state.user.role === 'parent') {
+      url += `?studentId=${state.activeChildId}`;
+    }
+
+    const stats = await api(url);
+    state.testStats = stats;
+    renderTestStats(stats);
+  } catch (err) {
+    console.error('Error loading test stats:', err);
+  }
+}
+
+function renderTestStats(stats) {
+  if (!stats) return;
+
+  if (statDominantTier) {
+    statDominantTier.textContent = stats.dominantTier || '-';
+  }
+  if (statTotalTestsCount) {
+    statTotalTestsCount.textContent = stats.totalTests;
+  }
+  if (statTopSubject) {
+    if (stats.subjects && stats.subjects.length > 0) {
+      statTopSubject.textContent = `${stats.subjects[0].subject} (${stats.subjects[0].count})`;
+    } else {
+      statTopSubject.textContent = '-';
+    }
+  }
+
+  // Distribution bar
+  if (barMastering) barMastering.style.width = `${stats.tierPercentages.MASTERING}%`;
+  if (barSecure) barSecure.style.width = `${stats.tierPercentages.SECURE}%`;
+  if (barDeveloping) barDeveloping.style.width = `${stats.tierPercentages.DEVELOPING}%`;
+  if (barEmerging) barEmerging.style.width = `${stats.tierPercentages.EMERGING}%`;
+
+  // Legend percentages
+  if (legendMasteringPct) legendMasteringPct.textContent = `${stats.tierPercentages.MASTERING}%`;
+  if (legendSecurePct) legendSecurePct.textContent = `${stats.tierPercentages.SECURE}%`;
+  if (legendDevelopingPct) legendDevelopingPct.textContent = `${stats.tierPercentages.DEVELOPING}%`;
+  if (legendEmergingPct) legendEmergingPct.textContent = `${stats.tierPercentages.EMERGING}%`;
+
+  // Subjects performance grid
+  if (subjectsPerformanceGrid) {
+    if (!stats.subjects || stats.subjects.length === 0) {
+      subjectsPerformanceGrid.innerHTML = `
+        <div style="grid-column: 1 / -1; color: var(--slate-500); font-size: 0.88rem; padding: 1rem 0;">
+          No subject analytics available yet.
+        </div>
+      `;
+      return;
+    }
+
+    subjectsPerformanceGrid.innerHTML = stats.subjects.map(s => {
+      const tierClass = `tier-${(s.latestTier || 'emerging').toLowerCase()}`;
+      let displayResult = s.latestResult;
+      if (!['EMERGING', 'DEVELOPING', 'SECURE', 'MASTERING'].includes(String(s.latestResult).toUpperCase())) {
+        displayResult = `Grade ${s.latestResult}`;
+      }
+
+      return `
+        <div class="subject-perf-card">
+          <div class="subject-perf-header">
+            <span class="subject-perf-name">${escapeHtml(s.subject)}</span>
+            <span class="subject-perf-count">${s.count} test${s.count === 1 ? '' : 's'}</span>
+          </div>
+          <div class="subject-perf-tier-row">
+            <span class="subject-perf-tier-pill ${tierClass}">
+              Latest: ${escapeHtml(s.latestTier)} (${escapeHtml(displayResult)})
+            </span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+}
+
+async function handleTestResultFormSubmit(e) {
+  e.preventDefault();
+  
+  const checkedYear = document.querySelector('input[name="resultYearGroup"]:checked');
+  const yearGroup = checkedYear ? checkedYear.value : 'Y7';
+  const subject = inputResultSubject.value.trim();
+  const testDate = selectResultDate.value;
+  const testName = inputResultTestName.value.trim();
+  const marks = inputResultMarks.value.trim();
+
+  let rawResult = '';
+  if (['Y7', 'Y8', 'Y9'].includes(yearGroup)) {
+    const checkedLevel = document.querySelector('input[name="ks3Level"]:checked');
+    rawResult = checkedLevel ? checkedLevel.value : 'SECURE';
+  } else if (yearGroup === 'GCSE') {
+    const checkedGrade = document.querySelector('input[name="gcseGrade"]:checked');
+    rawResult = checkedGrade ? checkedGrade.value : '7';
+  }
+
+  if (!subject) {
+    showToast('Please enter a subject.', 'error');
+    return;
+  }
+
+  try {
+    await api('/api/test-results', {
+      method: 'POST',
+      body: JSON.stringify({
+        year_group: yearGroup,
+        subject,
+        test_date: testDate,
+        test_name: testName,
+        marks,
+        raw_result: rawResult
+      })
+    });
+
+    showToast('Test result recorded successfully!');
+    testResultModal.style.display = 'none';
+    await loadTestResults();
+    await loadTestStats();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
 // --- ATTACH EVENT LISTENERS ---
 function attachEventListeners() {
   // Brand logo click returns to main calendar or home
   brandLogoBtn.addEventListener('click', () => {
     if (state.user) {
+      switchTab('calendar');
       state.currentDate = new Date();
       renderCurrentCalendarView();
     }
   });
+
+  // App Nav Tabs (Calendar vs Test Results)
+  if (tabNavCalendar) {
+    tabNavCalendar.addEventListener('click', () => switchTab('calendar'));
+  }
+  if (tabNavTestResults) {
+    tabNavTestResults.addEventListener('click', () => switchTab('test_results'));
+  }
 
   // Demo Login Buttons
   document.getElementById('btnDemoStudent').addEventListener('click', () => loginDemo('alex_student', 'alex123'));
@@ -1010,12 +1473,16 @@ function attachEventListeners() {
   btnCancelEvent.addEventListener('click', () => eventModal.style.display = 'none');
   btnCloseViewModal.addEventListener('click', () => eventViewModal.style.display = 'none');
   btnCloseLinkChildModal.addEventListener('click', () => linkChildModal.style.display = 'none');
+  if (btnCloseTestResultModal) btnCloseTestResultModal.addEventListener('click', () => testResultModal.style.display = 'none');
+  if (btnCancelTestResult) btnCancelTestResult.addEventListener('click', () => testResultModal.style.display = 'none');
 
   // Close modals on clicking overlay background
-  [authModal, eventModal, eventViewModal, linkChildModal].forEach(modal => {
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) modal.style.display = 'none';
-    });
+  [authModal, eventModal, eventViewModal, linkChildModal, testResultModal].forEach(modal => {
+    if (modal) {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.style.display = 'none';
+      });
+    }
   });
 
   // Auth Modal tabs
@@ -1108,7 +1575,7 @@ function attachEventListeners() {
     });
   });
 
-  // Subject quick suggestion chips
+  // Subject quick suggestion chips for events
   document.querySelectorAll('.subject-chip').forEach(chip => {
     chip.addEventListener('click', () => {
       eventSubject.value = chip.textContent;
@@ -1118,6 +1585,64 @@ function attachEventListeners() {
   // Event form actions
   eventForm.addEventListener('submit', handleEventFormSubmit);
   btnDeleteEvent.addEventListener('click', handleDeleteEvent);
+
+  // --- Test Results Listeners ---
+  if (btnAddTestResultBtn) {
+    btnAddTestResultBtn.addEventListener('click', openAddTestResultModal);
+  }
+
+  // Year group selection in test modal
+  document.querySelectorAll('input[name="resultYearGroup"]').forEach(radio => {
+    radio.addEventListener('change', (e) => setModalYearGroup(e.target.value));
+  });
+  document.querySelectorAll('.year-option').forEach(option => {
+    option.addEventListener('click', () => {
+      const radio = option.querySelector('input');
+      if (radio) setModalYearGroup(radio.value);
+    });
+  });
+
+  // KS3 level cards
+  document.querySelectorAll('input[name="ks3Level"]').forEach(radio => {
+    radio.addEventListener('change', (e) => setModalKs3Level(e.target.value));
+  });
+  document.querySelectorAll('.result-level-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const radio = card.querySelector('input');
+      if (radio) setModalKs3Level(radio.value);
+    });
+  });
+
+  // GCSE grade buttons
+  document.querySelectorAll('input[name="gcseGrade"]').forEach(radio => {
+    radio.addEventListener('change', (e) => setModalGcseGrade(e.target.value));
+  });
+  document.querySelectorAll('.gcse-grade-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const radio = btn.querySelector('input');
+      if (radio) setModalGcseGrade(radio.value);
+    });
+  });
+
+  // Test modal quick subject chips
+  document.querySelectorAll('.result-subj-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      if (inputResultSubject) inputResultSubject.value = chip.textContent;
+    });
+  });
+
+  // Test result filter dropdowns
+  if (filterResultsYear) {
+    filterResultsYear.addEventListener('change', renderTestResultsList);
+  }
+  if (filterResultsSubject) {
+    filterResultsSubject.addEventListener('change', renderTestResultsList);
+  }
+
+  // Test result form submit
+  if (testResultForm) {
+    testResultForm.addEventListener('submit', handleTestResultFormSubmit);
+  }
 }
 
 // Start application

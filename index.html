@@ -26,6 +26,18 @@
         </div>
       </div>
 
+      <!-- Navigation Switcher (Calendar vs Test Results) -->
+      <nav class="app-nav-tabs" id="appNavTabs" style="display: none;">
+        <button class="nav-tab-btn active" id="tabNavCalendar" data-tab="calendar">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+          <span>Calendar</span>
+        </button>
+        <button class="nav-tab-btn" id="tabNavTestResults" data-tab="test_results">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 20V10"></path><path d="M12 20V4"></path><path d="M6 20v-6"></path></svg>
+          <span>Test Results & Growth</span>
+        </button>
+      </nav>
+
       <!-- User controls in header -->
       <div class="header-actions" id="headerActions">
         <!-- Injected dynamically via JS: Auth buttons or User Profile & Child Selector -->
@@ -198,6 +210,131 @@
         </div>
       </div>
 
+    </div>
+
+    <!-- Test Results & Growth View Container -->
+    <div id="testResultsApp" class="test-results-app" style="display: none;">
+      <!-- Read-Only notice for parents inside test results -->
+      <div class="notice-banner" id="parentResultsNotice" style="display: none;">
+        <div class="notice-icon">🔒</div>
+        <div class="notice-text">
+          <strong>Read-Only Mode:</strong> You are viewing <span id="resultsNoticeChildName">your child</span>'s academic test results and growth tracking.
+        </div>
+      </div>
+
+      <!-- Growth Overview Analytics Cards -->
+      <section class="results-stats-overview">
+        <div class="stat-card">
+          <div class="stat-icon" style="background: #fdf4ff; border-color: #f0abfc;">🏆</div>
+          <div class="stat-details">
+            <span class="stat-value" id="statDominantTier">-</span>
+            <span class="stat-label">Current Mastery Level</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: #eff6ff; border-color: #bfdbfe;">📊</div>
+          <div class="stat-details">
+            <span class="stat-value" id="statTotalTestsCount">0</span>
+            <span class="stat-label">Total Tests Logged</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: #f0fdf4; border-color: #bbf7d0;">🎯</div>
+          <div class="stat-details">
+            <span class="stat-value" id="statTopSubject">-</span>
+            <span class="stat-label">Most Tested Subject</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: #fefce8; border-color: #fef08a;">📈</div>
+          <div class="stat-details">
+            <span class="stat-value" id="statGrowthTrend">Tracking</span>
+            <span class="stat-label">Progress Tracking</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Growth Distribution Card -->
+      <div class="growth-card">
+        <div class="growth-header">
+          <div>
+            <h3>Academic Growth & Tier Breakdown</h3>
+            <p class="growth-subtitle">Standardized progress scale: <strong>Mastering</strong> (Grades 8-9), <strong>Secure</strong> (Grades 6-7), <strong>Developing</strong> (Grade 5), <strong>Emerging</strong> (Grades 1-4)</p>
+          </div>
+        </div>
+
+        <!-- Visual Tier Distribution Bar -->
+        <div class="tier-distribution-bar">
+          <div class="tier-bar-segment seg-mastering" id="barMastering" style="width: 0%;" title="Mastering"></div>
+          <div class="tier-bar-segment seg-secure" id="barSecure" style="width: 0%;" title="Secure"></div>
+          <div class="tier-bar-segment seg-developing" id="barDeveloping" style="width: 0%;" title="Developing"></div>
+          <div class="tier-bar-segment seg-emerging" id="barEmerging" style="width: 0%;" title="Emerging"></div>
+        </div>
+
+        <!-- Legend -->
+        <div class="tier-legend-grid">
+          <div class="tier-legend-item">
+            <span class="legend-color-dot dot-mastering"></span>
+            <span class="legend-name">Mastering (Grades 8-9)</span>
+            <strong id="legendMasteringPct">0%</strong>
+          </div>
+          <div class="tier-legend-item">
+            <span class="legend-color-dot dot-secure"></span>
+            <span class="legend-name">Secure (Grades 6-7)</span>
+            <strong id="legendSecurePct">0%</strong>
+          </div>
+          <div class="tier-legend-item">
+            <span class="legend-color-dot dot-developing"></span>
+            <span class="legend-name">Developing (Grade 5)</span>
+            <strong id="legendDevelopingPct">0%</strong>
+          </div>
+          <div class="tier-legend-item">
+            <span class="legend-color-dot dot-emerging"></span>
+            <span class="legend-name">Emerging (Grades 1-4)</span>
+            <strong id="legendEmergingPct">0%</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Subject Performance Grid -->
+      <div class="subjects-performance-section">
+        <h3 class="section-title">Subject Breakdown & Growth</h3>
+        <div class="subjects-performance-grid" id="subjectsPerformanceGrid">
+          <!-- Injected via JS -->
+        </div>
+      </div>
+
+      <!-- Tests Log Toolbar & Filter -->
+      <div class="tests-toolbar">
+        <div class="toolbar-left">
+          <h3 class="section-title" style="margin: 0;">Test History Log</h3>
+          <div class="test-filters">
+            <select id="filterResultsYear" class="form-select select-compact">
+              <option value="ALL">All Years</option>
+              <option value="Y7">Year 7</option>
+              <option value="Y8">Year 8</option>
+              <option value="Y9">Year 9</option>
+              <option value="GCSE">GCSE</option>
+            </select>
+            <select id="filterResultsSubject" class="form-select select-compact">
+              <option value="ALL">All Subjects</option>
+            </select>
+          </div>
+        </div>
+        <div class="toolbar-right">
+          <button class="btn-add-event" id="btnAddTestResultBtn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            <span>Add Test Result</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Results Cards Feed -->
+      <div class="results-table-container">
+        <div class="results-cards-list" id="resultsCardsList">
+          <!-- Injected via JS -->
+        </div>
+      </div>
     </div>
 
     <!-- Welcome landing state (When not logged in) -->
@@ -522,6 +659,144 @@
             <input type="text" id="inputLinkCode" class="form-input" placeholder="e.g. REV-1001" style="text-transform: uppercase;" required>
           </div>
           <button type="submit" class="btn-submit-purple" id="btnSubmitLinkChild">Verify & Link Student</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD TEST RESULT MODAL (Student Only) -->
+  <div class="modal-overlay" id="testResultModal" style="display: none;">
+    <div class="modal-card modal-card-wide">
+      <div class="modal-header">
+        <h3>Add Test Result</h3>
+        <button class="modal-close" id="btnCloseTestResultModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="testResultForm">
+          <!-- 1. Year Group Selector (Required) -->
+          <div class="form-group">
+            <label class="form-label">Select Your Year Group:</label>
+            <div class="year-group-selector">
+              <label class="year-option selected" id="optYearY7">
+                <input type="radio" name="resultYearGroup" value="Y7" checked>
+                <span>Year 7</span>
+              </label>
+              <label class="year-option" id="optYearY8">
+                <input type="radio" name="resultYearGroup" value="Y8">
+                <span>Year 8</span>
+              </label>
+              <label class="year-option" id="optYearY9">
+                <input type="radio" name="resultYearGroup" value="Y9">
+                <span>Year 9</span>
+              </label>
+              <label class="year-option" id="optYearGCSE">
+                <input type="radio" name="resultYearGroup" value="GCSE">
+                <span>GCSE</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- 2. Subject -->
+          <div class="form-group">
+            <label class="form-label" for="inputResultSubject">Subject:</label>
+            <input type="text" id="inputResultSubject" class="form-input" placeholder="e.g. Mathematics, Biology, English..." required>
+            <div class="quick-subject-chips">
+              <span class="chip-label">Quick select:</span>
+              <button type="button" class="result-subj-chip">Maths</button>
+              <button type="button" class="result-subj-chip">English Lit</button>
+              <button type="button" class="result-subj-chip">English Lang</button>
+              <button type="button" class="result-subj-chip">Biology</button>
+              <button type="button" class="result-subj-chip">Chemistry</button>
+              <button type="button" class="result-subj-chip">Physics</button>
+              <button type="button" class="result-subj-chip">Science</button>
+              <button type="button" class="result-subj-chip">History</button>
+              <button type="button" class="result-subj-chip">Geography</button>
+              <button type="button" class="result-subj-chip">Computer Science</button>
+              <button type="button" class="result-subj-chip">French</button>
+            </div>
+          </div>
+
+          <!-- 3. Test Date (From September 2026 onwards) & Test Name -->
+          <div class="form-row">
+            <div class="form-group col-4">
+              <label class="form-label" for="selectResultDate">Month & Year:</label>
+              <select id="selectResultDate" class="form-select" required>
+                <!-- Dynamically populated from September 2026 onwards -->
+              </select>
+            </div>
+            <div class="form-group col-4">
+              <label class="form-label" for="inputResultTestName">Test Name / Topic (Optional):</label>
+              <input type="text" id="inputResultTestName" class="form-input" placeholder="e.g. Autumn Midterm Assessment">
+            </div>
+          </div>
+
+          <!-- 4. Optional Marks -->
+          <div class="form-group">
+            <label class="form-label" for="inputResultMarks">Your Marks / Score (Optional):</label>
+            <input type="text" id="inputResultMarks" class="form-input" placeholder="e.g. 45/50, 88% or 62 marks">
+            <span class="input-hint">Type your score if you'd like, and select your result level or grade below:</span>
+          </div>
+
+          <!-- 5. Dynamic Result Selection based on Year Group -->
+          <!-- For Y7, Y8, Y9: EMERGING, DEVELOPING, SECURE, MASTERING -->
+          <div class="form-group" id="ks3ResultGroup">
+            <label class="form-label">Assessment Level:</label>
+            <div class="ks3-result-grid">
+              <label class="result-level-card tier-emerging" id="cardEmerging">
+                <input type="radio" name="ks3Level" value="EMERGING">
+                <span class="level-icon">📙</span>
+                <strong>EMERGING</strong>
+                <small>Building foundation</small>
+              </label>
+              <label class="result-level-card tier-developing" id="cardDeveloping">
+                <input type="radio" name="ks3Level" value="DEVELOPING">
+                <span class="level-icon">📘</span>
+                <strong>DEVELOPING</strong>
+                <small>Making good progress</small>
+              </label>
+              <label class="result-level-card tier-secure selected" id="cardSecure">
+                <input type="radio" name="ks3Level" value="SECURE" checked>
+                <span class="level-icon">🛡️</span>
+                <strong>SECURE</strong>
+                <small>At expected standard</small>
+              </label>
+              <label class="result-level-card tier-mastering" id="cardMastering">
+                <input type="radio" name="ks3Level" value="MASTERING">
+                <span class="level-icon">🏆</span>
+                <strong>MASTERING</strong>
+                <small>Exceeding standard</small>
+              </label>
+            </div>
+          </div>
+
+          <!-- For GCSE: Grades 1 through 9 -->
+          <div class="form-group" id="gcseResultGroup" style="display: none;">
+            <label class="form-label">Select Your GCSE Grade (1 to 9):</label>
+            <div class="gcse-grades-grid">
+              <label class="gcse-grade-btn" data-grade="1"><input type="radio" name="gcseGrade" value="1"><span>1</span></label>
+              <label class="gcse-grade-btn" data-grade="2"><input type="radio" name="gcseGrade" value="2"><span>2</span></label>
+              <label class="gcse-grade-btn" data-grade="3"><input type="radio" name="gcseGrade" value="3"><span>3</span></label>
+              <label class="gcse-grade-btn" data-grade="4"><input type="radio" name="gcseGrade" value="4"><span>4</span></label>
+              <label class="gcse-grade-btn" data-grade="5"><input type="radio" name="gcseGrade" value="5"><span>5</span></label>
+              <label class="gcse-grade-btn" data-grade="6"><input type="radio" name="gcseGrade" value="6"><span>6</span></label>
+              <label class="gcse-grade-btn selected" data-grade="7"><input type="radio" name="gcseGrade" value="7" checked><span>7</span></label>
+              <label class="gcse-grade-btn" data-grade="8"><input type="radio" name="gcseGrade" value="8"><span>8</span></label>
+              <label class="gcse-grade-btn" data-grade="9"><input type="radio" name="gcseGrade" value="9"><span>9</span></label>
+            </div>
+            <div class="gcse-scale-legend">
+              <span>Grades 1-4: Emerging</span>
+              <span>Grade 5: Developing</span>
+              <span>Grades 6-7: Secure</span>
+              <span>Grades 8-9: Mastering</span>
+            </div>
+          </div>
+
+          <div class="modal-form-actions">
+            <div class="actions-right">
+              <button type="button" class="btn-secondary" id="btnCancelTestResult">Cancel</button>
+              <button type="submit" class="btn-submit-purple" id="btnSubmitTestResult">Save Test Result</button>
+            </div>
+          </div>
         </form>
       </div>
     </div>

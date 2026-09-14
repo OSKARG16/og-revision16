@@ -61,6 +61,20 @@ function initDb() {
       expires_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS test_results (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      year_group TEXT NOT NULL CHECK(year_group IN ('Y7', 'Y8', 'Y9', 'GCSE')),
+      subject TEXT NOT NULL,
+      test_date TEXT NOT NULL,
+      test_name TEXT,
+      marks TEXT,
+      raw_result TEXT NOT NULL,
+      growth_tier TEXT NOT NULL CHECK(growth_tier IN ('EMERGING', 'DEVELOPING', 'SECURE', 'MASTERING')),
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
 
   // Migration: Ensure link_code column exists if database was already created
@@ -88,6 +102,38 @@ function initDb() {
   }
 
   seedDefaultData();
+  seedTestResultsIfEmpty();
+}
+
+function seedTestResultsIfEmpty() {
+  try {
+    const testCount = db.prepare('SELECT COUNT(*) as count FROM test_results').get();
+    if (testCount.count === 0) {
+      const alex = db.prepare("SELECT id FROM users WHERE username = 'alex_student'").get();
+      const emma = db.prepare("SELECT id FROM users WHERE username = 'emma_student'").get();
+
+      const insertTestResult = db.prepare(`
+        INSERT INTO test_results (user_id, year_group, subject, test_date, test_name, marks, raw_result, growth_tier)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      if (alex) {
+        insertTestResult.run(alex.id, 'Y9', 'Mathematics', 'October 2026', 'Algebra & Graphs Checkpoint', '46/50', 'MASTERING', 'MASTERING');
+        insertTestResult.run(alex.id, 'Y9', 'Biology', 'November 2026', 'Cell Biology Assessment', '38/50', 'SECURE', 'SECURE');
+        insertTestResult.run(alex.id, 'Y9', 'English Literature', 'December 2026', 'Poetry Analysis Midterm', '32/50', 'DEVELOPING', 'DEVELOPING');
+        insertTestResult.run(alex.id, 'Y9', 'History', 'January 2027', 'Weimar Republic Assessment', '24/50', 'EMERGING', 'EMERGING');
+        insertTestResult.run(alex.id, 'GCSE', 'Mathematics', 'February 2027', 'GCSE Paper 1 Foundation/Higher Mock', '68/80', '8', 'MASTERING');
+        insertTestResult.run(alex.id, 'GCSE', 'Physics', 'March 2027', 'Forces & Motion Exam', '54/80', '6', 'SECURE');
+      }
+
+      if (emma) {
+        insertTestResult.run(emma.id, 'GCSE', 'Computer Science', 'November 2026', 'Paper 1 Algorithms Mock', '72/80', '9', 'MASTERING');
+        insertTestResult.run(emma.id, 'GCSE', 'French', 'December 2026', 'Grammar & Listening Assessment', '58/80', '7', 'SECURE');
+      }
+    }
+  } catch (err) {
+    console.error('Error seeding test results:', err);
+  }
 }
 
 function seedDefaultData() {
@@ -249,11 +295,53 @@ function seedDefaultData() {
     0
   );
 
+  // Seed initial test results for Alex and Emma if empty
+  try {
+    const testCount = db.prepare('SELECT COUNT(*) as count FROM test_results').get();
+    if (testCount.count === 0) {
+      const insertTestResult = db.prepare(`
+        INSERT INTO test_results (user_id, year_group, subject, test_date, test_name, marks, raw_result, growth_tier)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      // Alex (Y9 & GCSE)
+      insertTestResult.run(alexId, 'Y9', 'Mathematics', 'October 2026', 'Algebra & Graphs Checkpoint', '46/50', 'MASTERING', 'MASTERING');
+      insertTestResult.run(alexId, 'Y9', 'Biology', 'November 2026', 'Cell Biology Assessment', '38/50', 'SECURE', 'SECURE');
+      insertTestResult.run(alexId, 'Y9', 'English Literature', 'December 2026', 'Poetry Analysis Midterm', '32/50', 'DEVELOPING', 'DEVELOPING');
+      insertTestResult.run(alexId, 'Y9', 'History', 'January 2027', 'Weimar Republic Assessment', '24/50', 'EMERGING', 'EMERGING');
+      insertTestResult.run(alexId, 'GCSE', 'Mathematics', 'February 2027', 'GCSE Paper 1 Foundation/Higher Mock', '68/80', '8', 'MASTERING');
+      insertTestResult.run(alexId, 'GCSE', 'Physics', 'March 2027', 'Forces & Motion Exam', '54/80', '6', 'SECURE');
+
+      // Emma (GCSE)
+      insertTestResult.run(emmaId, 'GCSE', 'Computer Science', 'November 2026', 'Paper 1 Algorithms Mock', '72/80', '9', 'MASTERING');
+      insertTestResult.run(emmaId, 'GCSE', 'French', 'December 2026', 'Grammar & Listening Assessment', '58/80', '7', 'SECURE');
+    }
+  } catch (err) {
+    console.error('Error seeding test results:', err);
+  }
+
   console.log('Demo seed completed successfully!');
+}
+
+function mapGrowthTier(yearGroup, rawResult) {
+  if (['Y7', 'Y8', 'Y9'].includes(yearGroup)) {
+    const upper = String(rawResult).toUpperCase().trim();
+    if (['EMERGING', 'DEVELOPING', 'SECURE', 'MASTERING'].includes(upper)) {
+      return upper;
+    }
+  } else if (yearGroup === 'GCSE') {
+    const grade = parseInt(rawResult, 10);
+    if (grade >= 1 && grade <= 4) return 'EMERGING';
+    if (grade === 5) return 'DEVELOPING';
+    if (grade >= 6 && grade <= 7) return 'SECURE';
+    if (grade >= 8 && grade <= 9) return 'MASTERING';
+  }
+  return 'EMERGING';
 }
 
 module.exports = {
   db,
   initDb,
-  generateLinkCode
+  generateLinkCode,
+  mapGrowthTier
 };

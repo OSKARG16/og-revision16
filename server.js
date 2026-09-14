@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const { db, initDb, generateLinkCode } = require('./db');
+const { db, initDb, generateLinkCode, mapGrowthTier } = require('./db');
 
 // Initialize database & migrations
 initDb();
@@ -607,7 +607,227 @@ app.delete('/api/events/:id', authenticate, (req, res) => {
     res.json({ message: 'Event deleted successfully.' });
   } catch (err) {
     console.error('Error deleting event:', err);
-    res.status(500).json({ error: 'Failed to delete calendar item.' });
+    res.status(500).json({ error: 'Failed to delete event.' });
+  }
+});
+
+// --- TEST RESULTS & CHILD GROWTH ROUTES ---
+
+// Get test results (Student sees own; Parent specifies ?studentId=X if verified)
+app.get('/api/test-results', authenticate, (req, res) => {
+  try {
+    let targetUserId = req.user.id;
+
+    if (req.user.role === 'parent') {
+      const studentId = Number(req.query.studentId);
+      if (!studentId) {
+        return res.status(400).json({ error: 'Please select a child to view their test results.' });
+      }
+
+      const link = db.prepare('SELECT 1 FROM parent_children WHERE parent_id = ? AND child_id = ?').get(req.user.id, studentId);
+      if (!link) {
+        return res.status(403).json({ error: 'Access denied: You are not authorized to view this student\'s test results.' });
+      }
+      targetUserId = studentId;
+    }
+
+    const { subject, year_group } = req.query;
+    let query = 'SELECT * FROM test_results WHERE user_id = ?';
+    const params = [targetUserId];
+
+    if (subject && typeof subject === 'string') {
+      query += ' AND subject = ?';
+      params.push(sanitize(subject));
+    }
+
+    if (year_group && ['Y7', 'Y8', 'Y9', 'GCSE'].includes(year_group.toUpperCase())) {
+      query += ' AND year_group = ?';
+      params.push(year_group.toUpperCase());
+    }
+
+    query += ' ORDER BY id DESC';
+
+    const results = db.prepare(query).all(...params);
+    res.json(results);
+  } catch (err) {
+    console.error('Error fetching test results:', err);
+    res.status(500).json({ error: 'Failed to load test results.' });
+  }
+});
+
+// Add test result (STUDENT ONLY - Parents have read-only access)
+app.post('/api/test-results', authenticate, (req, res) => {
+  if (req.user.role !== 'student') {
+    return res.status(403).json({ error: 'Permission denied: Only students can log test results. Parents have read-only access.' });
+  }
+
+  try {
+    const { year_group, subject, test_date, test_name, marks, raw_result } = req.body;
+
+    const cleanYear = year_group ? year_group.trim().toUpperCase() : '';
+    if (!['Y7', 'Y8', 'Y9', 'GCSE'].includes(cleanYear)) {
+      return res.status(400).json({ error: 'Please select a valid year: Y7, Y8, Y9, or GCSE.' });
+    }
+
+    const cleanSubject = sanitize(subject);
+    if (!cleanSubject) {
+      return res.status(400).json({ error: 'Please enter or select a subject.' });
+    }
+
+    const cleanDate = sanitize(test_date);
+    if (!cleanDate) {
+      return res.status(400).json({ error: 'Please select the test date (from September 2026 onwards).' });
+    }
+
+    const cleanRaw = raw_result !== undefined && raw_result !== null ? String(raw_result).trim().toUpperCase() : '';
+    if (!cleanRaw) {
+      return res.status(400).json({ error: 'Please select your test result or grade.' });
+    }
+
+    // Validate result choices based on year group
+    if (['Y7', 'Y8', 'Y9'].includes(cleanYear)) {
+      if (!['EMERGING', 'DEVELOPING', 'SECURE', 'MASTERING'].includes(cleanRaw)) {
+        return res.status(400).json({ error: 'For Years 7-9, result must be EMERGING, DEVELOPING, SECURE, or MASTERING.' });
+      }
+    } else if (cleanYear === 'GCSE') {
+      const grade = parseInt(cleanRaw, 10);
+      if (isNaN(grade) || grade < 1 || grade > 9) {
+        return res.status(400).json({ error: 'For GCSE, result must be a grade from 1 to 9.' });
+      }
+    }
+
+    const growthTier = mapGrowthTier(cleanYear, cleanRaw);
+    const cleanTestName = test_name ? sanitize(test_name) : '';
+    const cleanMarks = marks ? sanitize(marks) : null;
+
+    const insertStmt = db.prepare(`
+      INSERT INTO test_results (user_id, year_group, subject, test_date, test_name, marks, raw_result, growth_tier)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const result = insertStmt.run(
+      req.user.id,
+      cleanYear,
+      cleanSubject,
+      cleanDate,
+      cleanTestName,
+      cleanMarks,
+      cleanRaw,
+      growthTier
+    );
+
+    const created = db.prepare('SELECT * FROM test_results WHERE id = ?').get(Number(result.lastInsertRowid));
+    res.status(201).json(created);
+  } catch (err) {
+    console.error('Error creating test result:', err);
+    res.status(500).json({ error: 'Failed to record test result.' });
+  }
+});
+
+// Delete test result (STUDENT ONLY)
+app.delete('/api/test-results/:id', authenticate, (req, res) => {
+  if (req.user.role !== 'student') {
+    return res.status(403).json({ error: 'Permission denied: Only students can delete test results.' });
+  }
+
+  const resultId = Number(req.params.id);
+  const existing = db.prepare('SELECT * FROM test_results WHERE id = ?').get(resultId);
+  if (!existing) {
+    return res.status(404).json({ error: 'Test result not found.' });
+  }
+
+  if (existing.user_id !== req.user.id) {
+    return res.status(403).json({ error: 'You can only delete your own test results.' });
+  }
+
+  try {
+    db.prepare('DELETE FROM test_results WHERE id = ?').run(resultId);
+    res.json({ message: 'Test result deleted successfully.' });
+  } catch (err) {
+    console.error('Error deleting test result:', err);
+    res.status(500).json({ error: 'Failed to delete test result.' });
+  }
+});
+
+// Get test results analytics and growth statistics
+app.get('/api/test-results/stats', authenticate, (req, res) => {
+  try {
+    let targetUserId = req.user.id;
+
+    if (req.user.role === 'parent') {
+      const studentId = Number(req.query.studentId);
+      if (!studentId) {
+        return res.status(400).json({ error: 'Please select a child to view statistics.' });
+      }
+
+      const link = db.prepare('SELECT 1 FROM parent_children WHERE parent_id = ? AND child_id = ?').get(req.user.id, studentId);
+      if (!link) {
+        return res.status(403).json({ error: 'Access denied: You are not authorized to view this student\'s statistics.' });
+      }
+      targetUserId = studentId;
+    }
+
+    const allResults = db.prepare('SELECT * FROM test_results WHERE user_id = ? ORDER BY id ASC').all(targetUserId);
+
+    const totalTests = allResults.length;
+    const tierCounts = {
+      MASTERING: 0,
+      SECURE: 0,
+      DEVELOPING: 0,
+      EMERGING: 0
+    };
+
+    const subjectMap = {};
+
+    for (const r of allResults) {
+      if (tierCounts[r.growth_tier] !== undefined) {
+        tierCounts[r.growth_tier]++;
+      }
+
+      if (!subjectMap[r.subject]) {
+        subjectMap[r.subject] = {
+          subject: r.subject,
+          count: 0,
+          tierCounts: { MASTERING: 0, SECURE: 0, DEVELOPING: 0, EMERGING: 0 },
+          latestResult: r.raw_result,
+          latestTier: r.growth_tier
+        };
+      }
+      subjectMap[r.subject].count++;
+      subjectMap[r.subject].tierCounts[r.growth_tier]++;
+      subjectMap[r.subject].latestResult = r.raw_result;
+      subjectMap[r.subject].latestTier = r.growth_tier;
+    }
+
+    const tierPercentages = {
+      MASTERING: totalTests > 0 ? Math.round((tierCounts.MASTERING / totalTests) * 100) : 0,
+      SECURE: totalTests > 0 ? Math.round((tierCounts.SECURE / totalTests) * 100) : 0,
+      DEVELOPING: totalTests > 0 ? Math.round((tierCounts.DEVELOPING / totalTests) * 100) : 0,
+      EMERGING: totalTests > 0 ? Math.round((tierCounts.EMERGING / totalTests) * 100) : 0
+    };
+
+    let dominantTier = 'None yet';
+    let maxCount = 0;
+    for (const tier of ['MASTERING', 'SECURE', 'DEVELOPING', 'EMERGING']) {
+      if (tierCounts[tier] > maxCount) {
+        maxCount = tierCounts[tier];
+        dominantTier = tier;
+      }
+    }
+
+    const subjects = Object.values(subjectMap).sort((a, b) => b.count - a.count);
+
+    res.json({
+      totalTests,
+      tierCounts,
+      tierPercentages,
+      dominantTier: totalTests > 0 ? dominantTier : 'None yet',
+      subjects,
+      recentHistory: allResults.slice(-5).reverse()
+    });
+  } catch (err) {
+    console.error('Error fetching test stats:', err);
+    res.status(500).json({ error: 'Failed to compute growth statistics.' });
   }
 });
 
