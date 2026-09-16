@@ -4,6 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OG REVISION - Student & Parent Study Calendar</title>
+  <!-- Apple iOS Standalone Web App & PWA Settings -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="OG Revision">
+  <meta name="application-name" content="OG REVISION">
+  <meta name="theme-color" content="#1e0938">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
+  <link rel="manifest" href="/manifest.json">
   <link rel="stylesheet" href="styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -441,7 +451,7 @@
           <!-- Username (NO EMAIL) -->
           <div class="form-group">
             <label class="form-label" for="authUsername">Username</label>
-            <input type="text" id="authUsername" class="form-input" placeholder="Choose a username (no email required)" required autocomplete="username">
+            <input type="text" id="authUsername" class="form-input" placeholder="Choose a username (no email required)" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
             <span class="input-hint">Letters, numbers, dashes and underscores only</span>
           </div>
 
@@ -451,15 +461,21 @@
               <label class="form-label" for="authPassword" style="margin-bottom: 0;">Password</label>
               <button type="button" class="btn-forgot-pass" id="btnForgotPass" style="background: none; border: none; font-size: 0.75rem; color: var(--purple-700); font-weight: 600; cursor: pointer; padding: 0;">Forgot / Reset?</button>
             </div>
-            <input type="password" id="authPassword" class="form-input" placeholder="Enter password (min. 4 characters)" required autocomplete="current-password">
+            <div class="password-input-wrapper" style="position: relative; display: flex; align-items: center;">
+              <input type="password" id="authPassword" class="form-input" placeholder="Enter password (min. 4 characters)" required autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" style="padding-right: 2.75rem; width: 100%;">
+              <button type="button" id="btnToggleAuthPassword" class="btn-toggle-pwd" title="Show/Hide password" style="position: absolute; right: 0.6rem; background: none; border: none; cursor: pointer; font-size: 1.15rem; color: #6b7280; padding: 0.25rem; display: flex; align-items: center; justify-content: center;" aria-label="Toggle password visibility">👁️</button>
+            </div>
           </div>
 
           <!-- Collapsible Password Reset Box -->
           <div class="forgot-pass-box" id="forgotPassBox" style="display: none; background: #faf5ff; border: 1px solid #e9d5ff; padding: 0.85rem; border-radius: var(--radius-sm); margin-bottom: 1.15rem;">
             <label class="form-label" style="color: #7e22ce;">Reset Your Password</label>
             <p class="field-subtext" style="font-size: 0.75rem; margin-bottom: 0.5rem;">Enter your desired new password. If you are a student, enter your Link Code if you have one.</p>
-            <input type="password" id="inputNewPassword" class="form-input" placeholder="Enter new password (min. 4 characters)" style="margin-bottom: 0.5rem;">
-            <input type="text" id="inputResetLinkCode" class="form-input" placeholder="Parent Link Code (Optional, e.g. REV-9JUD)" style="margin-bottom: 0.65rem; text-transform: uppercase;">
+            <div class="password-input-wrapper" style="position: relative; display: flex; align-items: center; margin-bottom: 0.5rem;">
+              <input type="password" id="inputNewPassword" class="form-input" placeholder="Enter new password (min. 4 characters)" autocapitalize="none" autocorrect="off" spellcheck="false" style="padding-right: 2.75rem; width: 100%;">
+              <button type="button" id="btnToggleResetPassword" class="btn-toggle-pwd" title="Show/Hide password" style="position: absolute; right: 0.6rem; background: none; border: none; cursor: pointer; font-size: 1.15rem; color: #6b7280; padding: 0.25rem; display: flex; align-items: center; justify-content: center;" aria-label="Toggle password visibility">👁️</button>
+            </div>
+            <input type="text" id="inputResetLinkCode" class="form-input" placeholder="Parent Link Code (Optional, e.g. REV-9JUD)" style="margin-bottom: 0.65rem; text-transform: uppercase;" autocapitalize="characters" autocorrect="off">
             <button type="button" class="btn-submit-purple" id="btnConfirmResetPass" style="padding: 0.5rem; font-size: 0.85rem;">Set New Password & Sign In</button>
           </div>
 

@@ -885,7 +885,7 @@ async function handleAuthSubmit(e) {
   authError.style.display = 'none';
 
   const username = authUsername.value.trim();
-  const password = authPassword.value;
+  const password = authPassword.value.trim();
 
   try {
     if (isRegisterMode) {
@@ -1505,10 +1505,31 @@ function attachEventListeners() {
     });
   }
 
+  // Show / Hide password toggles (Eye icons)
+  const btnToggleAuthPassword = document.getElementById('btnToggleAuthPassword');
+  if (btnToggleAuthPassword && authPassword) {
+    btnToggleAuthPassword.addEventListener('click', () => {
+      const isPwd = authPassword.type === 'password';
+      authPassword.type = isPwd ? 'text' : 'password';
+      btnToggleAuthPassword.textContent = isPwd ? '🙈' : '👁️';
+      btnToggleAuthPassword.title = isPwd ? 'Hide password' : 'Show password';
+    });
+  }
+
+  const btnToggleResetPassword = document.getElementById('btnToggleResetPassword');
+  if (btnToggleResetPassword && inputNewPassword) {
+    btnToggleResetPassword.addEventListener('click', () => {
+      const isPwd = inputNewPassword.type === 'password';
+      inputNewPassword.type = isPwd ? 'text' : 'password';
+      btnToggleResetPassword.textContent = isPwd ? '🙈' : '👁️';
+      btnToggleResetPassword.title = isPwd ? 'Hide password' : 'Show password';
+    });
+  }
+
   if (btnConfirmResetPass) {
     btnConfirmResetPass.addEventListener('click', async () => {
       const username = authUsername.value.trim();
-      const newPassword = inputNewPassword.value;
+      const newPassword = inputNewPassword.value.trim();
       const linkCode = inputResetLinkCode ? inputResetLinkCode.value.trim() : '';
 
       if (!username) {
