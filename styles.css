@@ -2444,3 +2444,41 @@ body {
   transform: scale(1.15);
   color: var(--purple-700);
 }
+
+/* Install Hero Button */
+.btn-hero-install {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.85rem 1.6rem;
+  background: linear-gradient(135deg, #3b0764 0%, #6d28d9 100%);
+  color: #ffffff;
+  border: 1.5px solid rgba(192, 132, 252, 0.45);
+  border-radius: var(--radius-md, 12px);
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(109, 40, 217, 0.35);
+  transition: all 0.2s ease;
+}
+
+.btn-hero-install:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(109, 40, 217, 0.5);
+  background: linear-gradient(135deg, #4c1d95 0%, #7c3aed 100%);
+  border-color: rgba(233, 213, 255, 0.8);
+}
+
+.btn-hero-install:active {
+  transform: translateY(0);
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}

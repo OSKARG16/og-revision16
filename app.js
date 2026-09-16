@@ -1476,8 +1476,60 @@ function attachEventListeners() {
   if (btnCloseTestResultModal) btnCloseTestResultModal.addEventListener('click', () => testResultModal.style.display = 'none');
   if (btnCancelTestResult) btnCancelTestResult.addEventListener('click', () => testResultModal.style.display = 'none');
 
+  // Install / Add to Home Screen Modal & Button
+  const btnHeroInstallApp = document.getElementById('btnHeroInstallApp');
+  const installModal = document.getElementById('installModal');
+  const btnCloseInstallModal = document.getElementById('btnCloseInstallModal');
+  const btnDismissInstallModal = document.getElementById('btnDismissInstallModal');
+  const btnNativeInstall = document.getElementById('btnNativeInstall');
+
+  let deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (btnNativeInstall) btnNativeInstall.style.display = 'block';
+  });
+
+  function openInstallModal() {
+    const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+    if (isStandalone) {
+      showToast('OG REVISION is already running in standalone mode! 🎉');
+      return;
+    }
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then((choice) => {
+        if (choice.outcome === 'accepted') {
+          showToast('Thank you for installing OG REVISION!');
+        }
+        deferredPrompt = null;
+      });
+      return;
+    }
+    if (installModal) {
+      installModal.style.display = 'flex';
+    }
+  }
+
+  if (btnHeroInstallApp) {
+    btnHeroInstallApp.addEventListener('click', openInstallModal);
+  }
+  if (btnCloseInstallModal && installModal) {
+    btnCloseInstallModal.addEventListener('click', () => installModal.style.display = 'none');
+  }
+  if (btnDismissInstallModal && installModal) {
+    btnDismissInstallModal.addEventListener('click', () => installModal.style.display = 'none');
+  }
+  if (btnNativeInstall) {
+    btnNativeInstall.addEventListener('click', () => {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+      }
+    });
+  }
+
   // Close modals on clicking overlay background
-  [authModal, eventModal, eventViewModal, linkChildModal, testResultModal].forEach(modal => {
+  [authModal, eventModal, eventViewModal, linkChildModal, testResultModal, installModal].forEach(modal => {
     if (modal) {
       modal.addEventListener('click', (e) => {
         if (e.target === modal) modal.style.display = 'none';
