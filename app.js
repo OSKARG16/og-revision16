@@ -182,20 +182,35 @@ const toastContainer = document.getElementById('toastContainer');
 
 let isRegisterMode = false;
 
-// --- API HELPER ---
-async function api(endpoint, options = {}) {
+// --- API HELPER (With auto-retry for Render spin-up delays) ---
+async function api(endpoint, options = {}, retries = 2) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
   if (state.token) {
     headers['Authorization'] = `Bearer ${state.token}`;
   }
 
-  const res = await fetch(endpoint, { ...options, headers });
-  const data = await res.json().catch(() => ({}));
+  try {
+    const res = await fetch(endpoint, { ...options, headers });
 
-  if (!res.ok) {
-    throw new Error(data.error || 'Something went wrong. Please try again.');
+    // Handle Render free tier spin-up delays (502 / 503 / 504)
+    if ((res.status === 502 || res.status === 503 || res.status === 504) && retries > 0) {
+      await new Promise(r => setTimeout(r, 1500));
+      return api(endpoint, options, retries - 1);
+    }
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Something went wrong. Please try again.');
+    }
+    return data;
+  } catch (err) {
+    if (retries > 0 && (err.name === 'TypeError' || err.message === 'Failed to fetch')) {
+      await new Promise(r => setTimeout(r, 1500));
+      return api(endpoint, options, retries - 1);
+    }
+    throw err;
   }
-  return data;
 }
 
 // --- TOAST NOTIFICATIONS ---
@@ -239,6 +254,11 @@ async function initApp() {
     try {
       const data = await api('/api/auth/me');
       state.user = data.user;
+      // Auto-upgrade to permanent stateless signed token if returned
+      if (data.token && data.token !== state.token) {
+        state.token = data.token;
+        localStorage.setItem('og_revision_token', data.token);
+      }
       localStorage.setItem('og_revision_user', JSON.stringify(data.user));
       await onUserAuthenticated();
       return;
@@ -1035,6 +1055,12 @@ async function handleEventFormSubmit(e) {
     eventModal.style.display = 'none';
     await loadEvents();
   } catch (err) {
+    const msg = (err.message || '').toLowerCase();
+    if (msg.includes('invalid or expired session') || msg.includes('sign in') || msg.includes('authentication required')) {
+      showToast('Please sign in to save your item.', 'error');
+      openAuthModal(false);
+      return;
+    }
     showToast(err.message, 'error');
   }
 }
