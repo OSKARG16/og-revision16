@@ -3,9 +3,34 @@
 // Role-based Study & Revision Calendar (Student & Parent)
 // ===================================================================
 
+function getStoredToken() {
+  const local = localStorage.getItem('og_revision_token');
+  if (local) return local;
+  if (typeof document !== 'undefined' && document.cookie) {
+    const match = document.cookie.match(/(?:^|;\s*)og_session=([^;]+)/);
+    if (match) {
+      const cookieToken = decodeURIComponent(match[1]).trim();
+      if (cookieToken) {
+        localStorage.setItem('og_revision_token', cookieToken);
+        return cookieToken;
+      }
+    }
+  }
+  return null;
+}
+
+function getStoredUser() {
+  try {
+    const raw = localStorage.getItem('og_revision_user');
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 const state = {
-  token: localStorage.getItem('og_revision_token') || null,
-  user: null,              // { id, username, role, display_name, link_code }
+  token: getStoredToken(),
+  user: getStoredUser(),   // { id, username, role, display_name, link_code }
   linkedChildren: [],      // Array of children if user is parent
   activeChildId: null,     // Currently viewed child ID if parent
   currentDate: new Date(), // Active calendar focus date
@@ -200,16 +225,38 @@ async function initApp() {
   populateTestDateOptions();
   attachEventListeners();
 
-  if (state.token) {
+  const token = getStoredToken();
+  if (token) {
+    state.token = token;
+
+    // Load cached user state immediately to avoid welcome screen flicker
+    const cachedUser = getStoredUser();
+    if (cachedUser) {
+      state.user = cachedUser;
+      await onUserAuthenticated();
+    }
+
     try {
       const data = await api('/api/auth/me');
       state.user = data.user;
+      localStorage.setItem('og_revision_user', JSON.stringify(data.user));
       await onUserAuthenticated();
       return;
     } catch (err) {
-      console.warn('Existing session invalid:', err);
-      state.token = null;
-      localStorage.removeItem('og_revision_token');
+      const msg = err.message ? err.message.toLowerCase() : '';
+      if (msg.includes('sign in') || msg.includes('expired') || msg.includes('invalid session')) {
+        console.warn('Session expired or invalid:', err);
+        state.token = null;
+        state.user = null;
+        localStorage.removeItem('og_revision_token');
+        localStorage.removeItem('og_revision_user');
+        renderGuestView();
+        return;
+      }
+      // If network offline or server is waking up, keep authenticated state with cached user!
+      if (state.user) {
+        return;
+      }
     }
   }
 
@@ -390,6 +437,7 @@ async function loadEvents() {
       state.events = JSON.parse(cached);
       updateOverviewStats();
       renderCurrentCalendarView();
+      checkUpcomingTestReminders();
     } catch {}
   }
 
@@ -405,6 +453,7 @@ async function loadEvents() {
     localStorage.setItem(cacheKey, JSON.stringify(events));
     updateOverviewStats();
     renderCurrentCalendarView();
+    checkUpcomingTestReminders();
   } catch (err) {
     if (!cached) {
       showToast(err.message, 'error');
@@ -413,14 +462,147 @@ async function loadEvents() {
 }
 
 function updateOverviewStats() {
-  const revisions = state.events.filter(e => e.type === 'REVISION').length;
-  const tests = state.events.filter(e => e.type === 'TEST').length;
-  const homework = state.events.filter(e => e.type === 'HOMEWORK').length;
+  const todayStr = formatLocalDate(new Date());
+
+  // Upcoming tests: ONLY tests that are NOT completed AND NOT in the past (date >= todayStr)
+  const upcomingTests = state.events.filter(e => {
+    if (e.type !== 'TEST') return false;
+    if (e.completed) return false;
+    if (e.date < todayStr) return false; // Past tests do NOT count as upcoming
+    return true;
+  }).length;
+
+  const revisions = state.events.filter(e => e.type === 'REVISION' && !e.completed).length;
+  const homework = state.events.filter(e => e.type === 'HOMEWORK' && !e.completed).length;
 
   statRevisionCount.textContent = revisions;
-  statTestCount.textContent = tests;
+  statTestCount.textContent = upcomingTests;
   statHomeworkCount.textContent = homework;
-  statTotalCount.textContent = state.events.length;
+  statTotalCount.textContent = revisions + upcomingTests + homework;
+}
+
+// --- UPCOMING TEST NOTIFICATION POP-UPS (5 Days & 3 Days Before) ---
+function checkUpcomingTestReminders() {
+  if (!state.user || !state.events || state.events.length === 0) return;
+
+  const now = new Date();
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const todayStr = formatLocalDate(now);
+
+  const alerts = [];
+
+  state.events.forEach(ev => {
+    // Only tests that are NOT completed
+    if (ev.type !== 'TEST' || ev.completed) return;
+    if (!ev.date) return;
+
+    const parts = ev.date.split('-');
+    if (parts.length !== 3) return;
+    const testMidnight = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10)).getTime();
+
+    const diffMs = testMidnight - todayMidnight;
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 5 || diffDays === 3) {
+      const dismissedKey = `og_test_alert_${ev.id}_${diffDays}_${todayStr}`;
+      if (!localStorage.getItem(dismissedKey)) {
+        alerts.push({
+          event: ev,
+          daysLeft: diffDays,
+          dismissedKey
+        });
+      }
+    }
+  });
+
+  if (alerts.length > 0) {
+    showTestNotificationPopup(alerts);
+  }
+}
+
+function showTestNotificationPopup(alerts) {
+  const modal = document.getElementById('testNotificationModal');
+  const list = document.getElementById('testNotificationList');
+  const pushBox = document.getElementById('testNotificationWebPushBox');
+  if (!modal || !list) return;
+
+  list.innerHTML = alerts.map(a => {
+    const is3 = a.daysLeft === 3;
+    const badgeColor = is3 ? '#ef4444' : '#7c3aed';
+    const badgeBg = is3 ? '#fef2f2' : '#f5f3ff';
+    const badgeText = is3 ? '⚠️ In 3 Days!' : '🔔 In 5 Days!';
+    const borderCol = is3 ? '#fca5a5' : '#c4b5fd';
+
+    const d = new Date(a.event.date + 'T00:00:00');
+    const dateFormatted = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+
+    return `
+      <div style="background: ${badgeBg}; border: 1.5px solid ${borderCol}; border-radius: 12px; padding: 0.9rem; display: flex; flex-direction: column; gap: 0.35rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="background: ${badgeColor}; color: white; font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.55rem; border-radius: 6px; letter-spacing: 0.02em;">${badgeText}</span>
+          <span style="font-size: 0.8rem; font-weight: 600; color: #4b5563;">📅 ${dateFormatted}</span>
+        </div>
+        <div style="font-weight: 700; font-size: 1rem; color: #1e1b4b; margin-top: 0.2rem;">${escapeHtml(a.event.title)}</div>
+        <div style="font-size: 0.82rem; color: #6b21a8; font-weight: 600;">📚 Subject: ${escapeHtml(a.event.subject)}</div>
+        ${a.event.start_time ? `<div style="font-size: 0.78rem; color: #6b7280;">⏰ Time: ${escapeHtml(a.event.start_time)}${a.event.end_time ? ' - ' + escapeHtml(a.event.end_time) : ''}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  if (window.Notification && Notification.permission === 'default' && pushBox) {
+    pushBox.style.display = 'block';
+    const btnEnable = document.getElementById('btnEnableWebPush');
+    if (btnEnable) {
+      btnEnable.onclick = async () => {
+        try {
+          const res = await Notification.requestPermission();
+          if (res === 'granted') {
+            pushBox.style.display = 'none';
+            showToast('Lock-screen notifications enabled! 🎉');
+          }
+        } catch (e) {}
+      };
+    }
+  } else if (pushBox) {
+    pushBox.style.display = 'none';
+  }
+
+  // Trigger system notification if granted on iPhone PWA / desktop
+  if (window.Notification && Notification.permission === 'granted') {
+    alerts.forEach(a => {
+      try {
+        new Notification(`OG REVISION: Test in ${a.daysLeft} days!`, {
+          body: `${a.event.title} (${a.event.subject}) is scheduled for ${a.event.date}.`,
+          icon: '/icon-192.png'
+        });
+      } catch (e) {}
+    });
+  }
+
+  // Action button handling
+  const btnDismiss = document.getElementById('btnDismissTestNotifications');
+  const btnClose = document.getElementById('btnCloseTestNotificationModal');
+  const btnGo = document.getElementById('btnGoToCalendarFromNotification');
+
+  const dismissAll = () => {
+    alerts.forEach(a => localStorage.setItem(a.dismissedKey, '1'));
+    modal.style.display = 'none';
+  };
+
+  if (btnDismiss) btnDismiss.onclick = dismissAll;
+  if (btnClose) btnClose.onclick = dismissAll;
+  if (btnGo) {
+    btnGo.onclick = () => {
+      dismissAll();
+      switchTab('calendar');
+      if (alerts[0] && alerts[0].event && alerts[0].event.date) {
+        state.currentDate = new Date(alerts[0].event.date + 'T00:00:00');
+        renderCurrentCalendarView();
+      }
+    };
+  }
+
+  modal.style.display = 'flex';
 }
 
 function renderCurrentCalendarView() {
@@ -504,11 +686,12 @@ function renderMonthView() {
     for (const ev of dayEvents) {
       const typeClass = `type-${ev.type.toLowerCase()}`;
       const completedClass = ev.completed ? 'is-completed' : '';
+      const isPastTest = (ev.type === 'TEST' && ev.date < todayStr && !ev.completed) ? 'is-past-test' : '';
       const timeStr = ev.start_time ? `<span class="pill-time">${ev.start_time}</span>` : '';
       const icon = ev.type === 'REVISION' ? '📚' : ev.type === 'TEST' ? '📝' : '💼';
 
       eventsHtml += `
-        <div class="event-pill ${typeClass} ${completedClass}" data-id="${ev.id}">
+        <div class="event-pill ${typeClass} ${completedClass} ${isPastTest}" data-id="${ev.id}">
           <span>${icon}</span>
           ${timeStr}
           <span>${escapeHtml(ev.title)}</span>
@@ -612,8 +795,9 @@ function renderWeekView() {
       const typeClass = `type-${ev.type.toLowerCase()}`;
       const icon = ev.type === 'REVISION' ? '📚' : ev.type === 'TEST' ? '📝' : '💼';
 
+      const isPastTest = (ev.type === 'TEST' && ev.date < todayStr && !ev.completed) ? 'is-past-test' : '';
       const card = document.createElement('div');
-      card.className = `event-pill ${typeClass} ${ev.completed ? 'is-completed' : ''}`;
+      card.className = `event-pill ${typeClass} ${ev.completed ? 'is-completed' : ''} ${isPastTest}`.trim();
       card.style.whiteSpace = 'normal';
       card.style.height = 'auto';
       card.style.padding = '0.4rem 0.5rem';
@@ -649,9 +833,14 @@ function renderAgendaView() {
   currentPeriodTitle.textContent = 'All Upcoming Tasks';
   agendaList.innerHTML = '';
 
+  const todayStr = formatLocalDate(new Date());
+
   const filteredEvents = state.events.filter(e => {
-    if (state.filterType === 'ALL') return true;
-    return e.type === state.filterType;
+    if (state.filterType !== 'ALL' && e.type !== state.filterType) return false;
+    // Omit past tests: "don't show past tests, if i wanted to see my past tests i can see them on my calendar"
+    // "only for tests make it so that if the test was yesterday for example it should no longer say upcoming"
+    if (e.type === 'TEST' && e.date < todayStr) return false;
+    return true;
   });
 
   if (filteredEvents.length === 0) {
@@ -695,10 +884,19 @@ function renderAgendaView() {
       card.className = `agenda-item-card type-${ev.type.toLowerCase()}`;
       const icon = ev.type === 'REVISION' ? '📚' : ev.type === 'TEST' ? '📝' : '💼';
 
+      let statusBadge = '';
+      if (ev.completed) {
+        statusBadge = '<span style="color: #059669; font-size: 0.75rem; font-weight: 700;">✓ Completed</span>';
+      } else if (ev.type === 'TEST') {
+        statusBadge = '<span style="color: #6366f1; font-size: 0.75rem; font-weight: 700;">Upcoming Test</span>';
+      } else {
+        statusBadge = '<span style="color: #d97706; font-size: 0.75rem; font-weight: 600;">Pending</span>';
+      }
+
       card.innerHTML = `
         <div class="agenda-card-top">
           <span class="agenda-badge">${icon} ${ev.type}</span>
-          ${ev.completed ? '<span style="color: #059669; font-size: 0.75rem; font-weight: 700;">✓ Completed</span>' : ''}
+          ${statusBadge}
         </div>
         <div class="agenda-card-title">${escapeHtml(ev.title)}</div>
         <div class="agenda-card-sub">
@@ -730,8 +928,23 @@ function openEventViewModal(ev) {
   viewEventSubject.textContent = ev.subject;
   viewEventDate.textContent = ev.date;
   viewEventTime.textContent = ev.start_time ? `${ev.start_time}${ev.end_time ? ' to ' + ev.end_time : ''}` : 'All Day';
-  viewEventStatus.textContent = ev.completed ? '✓ Completed' : 'Pending';
-  viewEventStatus.style.color = ev.completed ? '#059669' : '#d97706';
+  
+  const todayStr = formatLocalDate(new Date());
+  if (ev.completed) {
+    viewEventStatus.textContent = '✓ Completed';
+    viewEventStatus.style.color = '#059669';
+  } else if (ev.type === 'TEST') {
+    if (ev.date < todayStr) {
+      viewEventStatus.textContent = 'Past Test';
+      viewEventStatus.style.color = '#64748b';
+    } else {
+      viewEventStatus.textContent = 'Upcoming Test';
+      viewEventStatus.style.color = '#7c3aed';
+    }
+  } else {
+    viewEventStatus.textContent = 'Pending';
+    viewEventStatus.style.color = '#d97706';
+  }
   viewEventDescription.textContent = ev.description || 'No notes provided.';
   viewParentReadOnlyNote.style.display = 'block';
 
@@ -1529,7 +1742,8 @@ function attachEventListeners() {
   }
 
   // Close modals on clicking overlay background
-  [authModal, eventModal, eventViewModal, linkChildModal, testResultModal, installModal].forEach(modal => {
+  const testNotificationModal = document.getElementById('testNotificationModal');
+  [authModal, eventModal, eventViewModal, linkChildModal, testResultModal, installModal, testNotificationModal].forEach(modal => {
     if (modal) {
       modal.addEventListener('click', (e) => {
         if (e.target === modal) modal.style.display = 'none';
